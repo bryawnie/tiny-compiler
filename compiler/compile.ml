@@ -4,8 +4,8 @@ open Asm
 let rec compile_expr (e : expr) : instruction list =
   match e with 
   | Num n -> [ IMov (Reg RAX, Const n) ] 
-  | Add1 e -> compile_expr e @ [] (* FILL HERE *)
-  | Sub1 e -> compile_expr e @ [] (* FILL HERE *)
+  | Add1 e -> compile_expr e @ [IAdd (Reg RAX, Const 1L)]
+  | Sub1 e -> compile_expr e @ [IAdd (Reg RAX, Const (-1L))]
 
 
 let compile_prog : expr Fmt.t =
