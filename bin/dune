@@ -1,0 +1,3 @@
+(executables
+ (names test langc langi)
+ (libraries compiler alcotest containers bbctester))
