@@ -39,8 +39,9 @@ let rec parse (sexp : sexp) : expr =
   | `Atom s ->
     begin match Int64.of_string_opt s with
       | Some n -> Num n
-      | None -> Fmt.failwith "Not a known atom: %s" s
+      | None -> Id s(*Fmt.failwith "Not a known atom: %s" s*)
     end
   | `List [`Atom "add1" ; e ] -> Add1 (parse e) 
   | `List [`Atom "sub1" ; e ] -> Sub1 (parse e)
+  | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse e, parse body)
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
