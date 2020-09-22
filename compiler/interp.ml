@@ -9,13 +9,23 @@ let liftNumV ( op : int64 -> int64) : value -> value =
 
 open Expr
 
+(** Environment **)
+type env = (string * value) list
+
+let empty_env : env = []
+  
+let extend_env : string -> value -> env -> env =
+    fun x v env -> (x, v) :: env
+
 (** Interpreter *)
 
-let rec interp (e : expr) : value =
+let rec interp ?(env=empty_env) (e : expr)  : value =
   match e with 
   | Num n -> NumV n
-  | Add1 e -> liftNumV (Int64.add 1L) (interp e) 
-  | Sub1 e -> liftNumV (Int64.add (-1L)) (interp e)
+  | Id x -> List.assoc x env
+  | Add1 e -> liftNumV (Int64.add 1L) (interp ~env:env e) 
+  | Sub1 e -> liftNumV (Int64.add (-1L)) (interp ~env:env e)
+  | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
 
 
 (** Pretty printing **)

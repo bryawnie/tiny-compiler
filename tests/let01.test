@@ -1,0 +1,6 @@
+NAME: let01
+DESCRIPTION: returns a number after declare it
+SRC:
+(let (x 5) x)
+EXPECTED:
+5

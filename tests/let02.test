@@ -1,0 +1,6 @@
+NAME: let02
+DESCRIPTION: a little more complex
+SRC:
+(let (x (let (y 6) y)) (add1 x))
+EXPECTED:
+7
