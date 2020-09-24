@@ -2,12 +2,28 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-typedef uint64_t u64;
+typedef uint64_t val;
 
-extern u64 our_code_starts_here() asm("our_code_starts_here");
+extern val our_code_starts_here() asm("our_code_starts_here");
+
+const val BOOL_BITMASK = 1;
+const val BOOL_TRUE = -1;
+const val BOOL_FALSE = 1;
+
+void print_value(val v) {
+  if (!(v & BOOL_BITMASK)) {// integer
+    printf("%ld", v >> 1);
+  } else if (v == BOOL_TRUE) {
+    printf("true");
+  } else if (v == BOOL_FALSE) {
+    printf("false");
+  } else {
+    printf("Unknown value: %#018x", v);
+  }
+}
 
 int main(int argc, char** argv) {
-  u64 result = our_code_starts_here();
-  printf("%" PRId64 "\n", result);
+  val result = our_code_starts_here();
+  print_value(result);
   return 0;
 }
