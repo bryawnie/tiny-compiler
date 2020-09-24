@@ -28,3 +28,7 @@ setup.log
 # Local OPAM switch
 _opam/
 .vscode
+
+# Test output
+*.run
+*.s

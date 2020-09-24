@@ -36,6 +36,8 @@ open Expr
 
 let rec parse (sexp : sexp) : expr = 
   match sexp with
+  | `Atom "true" -> Bool true
+  | `Atom "false" -> Bool false
   | `Atom s ->
     begin match Int64.of_string_opt s with
       | Some n -> Num n

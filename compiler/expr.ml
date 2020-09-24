@@ -15,6 +15,7 @@ type binOp =
 
 type expr = 
   | Num of int64
+  | Bool of bool
   | Id of string
   | Add1 of expr
   | Sub1 of expr
@@ -25,6 +26,7 @@ open Fmt
 
 let rec pp_expr fmt = function
   | Num n -> int64 fmt n
+  | Bool b -> bool fmt b
   | Id x -> string fmt x
   | Add1 e -> pf fmt "(add1 %a)" pp_expr e
   | Sub1 e -> pf fmt "(sub1 %a)" pp_expr e

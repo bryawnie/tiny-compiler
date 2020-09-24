@@ -7,12 +7,28 @@ let gensym =
     counter := !counter + 1;
     Format.sprintf "%s_%d" basename !counter)
 
+(* constants *)
+let true_encoding = -1L (* 0b1111...1111 *)
+let false_encoding = 1L (* 0b0000...0001 *)
+let max_int = Int64.div Int64.max_int 2L
+let min_int = Int64.div Int64.min_int 2L
+
+let encode_int (n: int64) : arg =
+  if n > max_int || n < min_int then
+    failwith ("Integer overflow: " ^ (Int64.to_string n))
+  else
+    Const (Int64.shift_left n 1)
+
+let encode_bool (b: bool) : arg =
+  if b then Const true_encoding else Const false_encoding
+
 let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
-  | Num n -> [ IMov (Reg RAX, Const n) ] 
+  | Num n -> [ IMov (Reg RAX, encode_int n) ]
+  | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
   | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
-  | Add1 e -> compile_expr e env @ [IAdd (Reg RAX, Const 1L)]
-  | Sub1 e -> compile_expr e env @ [IAdd (Reg RAX, Const (-1L))]
+  | Add1 e -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
+  | Sub1 e -> compile_expr e env @ [IAdd (Reg RAX, Const (-2L))]
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
