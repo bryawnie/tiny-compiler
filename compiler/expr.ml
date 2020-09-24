@@ -1,6 +1,8 @@
 
 type binOp =
   | Add
+  | Sub
+  | Mul
 
 (* 
   <expr> ::= number
@@ -30,4 +32,6 @@ let rec pp_expr fmt = function
   | BinOp (op, x1, x2) -> 
       begin match op with
       | Add -> pf fmt "(+ %a %a)"  pp_expr x1 pp_expr x2
+      | Sub -> pf fmt "(- %a %a)"  pp_expr x1 pp_expr x2
+      | Mul -> pf fmt "(* %a %a)"  pp_expr x1 pp_expr x2
       end

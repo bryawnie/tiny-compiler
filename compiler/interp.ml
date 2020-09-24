@@ -12,7 +12,7 @@ let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
     | NumV n1, NumV n2 -> NumV (op n1 n2)
-    | _ -> Fmt.failwith "Error: Binop applied to non numeric value" 
+    (* | _ -> Fmt.failwith "Error: Binop applied to non numeric value"  *)
 
 open Expr
 
@@ -33,8 +33,12 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
   | Add1 e -> liftNumV (Int64.add) (NumV 1L) (interp ~env:env e) 
   | Sub1 e -> liftNumV (Int64.add) (NumV (-1L)) (interp ~env:env e) 
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
-  | BinOp (_,l,r) -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
-  (* Only Additions by the moment *)
+  | BinOp (op,l,r) -> 
+      begin match op with 
+      | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
+      | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
+      | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
+      end
 
 
 (** Pretty printing **)

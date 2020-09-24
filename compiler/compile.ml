@@ -18,12 +18,18 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       let compiled_val = compile_expr v env in
       let save_val     = [ IMov(RegOffset (RSP, slot), Reg RAX) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
-  | BinOp (_,l,r) -> (* Solo sumas de momento *)
+  | BinOp (op,l,r) -> (* Solo sumas de momento *)
       let compiled_right = compile_expr r env in
       let (new_env,slot) = extend_env (gensym "tmp") env in
       let save_right     = [ IMov(RegOffset (RSP, slot), Reg RAX) ] in
       let compiled_left  = compile_expr l new_env in
-      compiled_right @ save_right @ compiled_left @ [IAdd (Reg RAX, RegOffset (RSP, slot))]
+      let apply_op  =
+        match op with
+        | Add -> [IAdd (Reg RAX, RegOffset (RSP, slot))]
+        | Sub -> [ISub (Reg RAX, RegOffset (RSP, slot))]
+        | Mul -> [IMul (Reg RAX, RegOffset (RSP, slot))]
+      in
+      compiled_right @ save_right @ compiled_left @ apply_op
 
 
 let compile_prog : expr Fmt.t =

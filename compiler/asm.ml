@@ -28,6 +28,8 @@ type arg =
 type instruction =
 | IMov of arg * arg
 | IAdd of arg * arg
+| ISub of arg * arg
+| IMul of arg * arg
 | IRet
 
 let pp_reg : reg Fmt.t =
@@ -48,6 +50,8 @@ let pp_instr : instruction Fmt.t =
   match instr with
   | IMov (a1, a2) -> Fmt.pf fmt "  mov %a, %a" pp_arg a1 pp_arg a2
   | IAdd (a1, a2) -> Fmt.pf fmt "  add %a, %a" pp_arg a1 pp_arg a2
+  | ISub (a1, a2) -> Fmt.pf fmt "  sub %a, %a" pp_arg a1 pp_arg a2
+  | IMul (a1, a2) -> Fmt.pf fmt "  imul %a, %a" pp_arg a1 pp_arg a2
   | IRet -> Fmt.pf fmt "  ret" 
 
 let pp_instrs : (instruction list) Fmt.t =
