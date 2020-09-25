@@ -7,6 +7,12 @@ let gensym  =
     counter := !counter + 1;
     Format.sprintf "%s_%d" basename !counter)
 
+let gensym_if  =
+  let counter = ref 0 in 
+  (fun () ->
+    counter := !counter + 1;
+    (Format.sprintf "if_false_%d" !counter, Format.sprintf "done_%d" !counter) )
+
 (* constants *)
 let true_encoding = -1L (* 0b1111...1111 *)
 let false_encoding = 1L (* 0b0000...0001 *)
@@ -51,8 +57,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       in
       compiled_right @ save_right @ compiled_left @ apply_op
   | If (c, t, f) -> 
-    let else_label = (gensym "if_false") in
-    let done_label = (gensym "done") in
+    let (else_label, done_label) = gensym_if () in
     (compile_expr c env) @
     [
       ICmp (Reg RAX, Const false_encoding);
