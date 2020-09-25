@@ -19,6 +19,15 @@ let liftNumV ( op : int64 -> int64) : value -> value =
   | NumV n -> NumV (op n)
   | x -> Fmt.failwith "(liftNumV) type error: expected int64, got: %a" pp_value x
 
+(* Lift boolean functions to values*)
+let liftBoolV (op: bool -> bool) : value -> value =
+  function
+  | BoolV p -> BoolV (op p)
+  | q -> Fmt.failwith "(liftBoolV) type error: expected bool, got: %a" pp_value q
+
+(* Should probably add a generalized lifter *)
+(*let liftValue (op: 'a -> 'b) : value -> value = ...*)
+
 
 open Expr
 
@@ -39,4 +48,7 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
   | Id x -> List.assoc x env
   | Add1 e -> liftNumV (Int64.add 1L) (interp ~env:env e) 
   | Sub1 e -> liftNumV (Int64.add (-1L)) (interp ~env:env e)
+  | Not e -> liftBoolV (not) (interp ~env:env e)
+  | Or (p, q) -> BoolV false (* FIXME *)
+  | And (p, q) -> BoolV false (* FIXME *)
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b

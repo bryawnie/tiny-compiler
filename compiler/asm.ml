@@ -1,6 +1,7 @@
 (* registers *)
 type reg = 
 | RAX
+| RBX
 | RSP
 
 (** Environment **)
@@ -28,12 +29,16 @@ type arg =
 type instruction =
 | IMov of arg * arg
 | IAdd of arg * arg
+| IOr of arg * arg (* Bitwise logical or *)
+| IAnd of arg * arg (* Bitwase logical and *)
+| INeg of arg (* Arithmetic/2's complement negation *)
 | IRet
 
 let pp_reg : reg Fmt.t =
   fun fmt r ->
     match r with
     | RAX -> Fmt.string fmt "RAX"
+    | RBX -> Fmt.string fmt "RBX"
     | RSP -> Fmt.string fmt "RSP"
 
 let pp_arg : arg Fmt.t =
@@ -48,6 +53,9 @@ let pp_instr : instruction Fmt.t =
   match instr with
   | IMov (a1, a2) -> Fmt.pf fmt "  mov %a, %a" pp_arg a1 pp_arg a2
   | IAdd (a1, a2) -> Fmt.pf fmt "  add %a, %a" pp_arg a1 pp_arg a2
+  | IOr (a1, a2) -> Fmt.pf fmt "  or %a, %a" pp_arg a1 pp_arg a2
+  | IAnd (a1, a2) -> Fmt.pf fmt "  and %a, %a" pp_arg a1 pp_arg a2
+  | INeg a -> Fmt.pf fmt "  neg %a" pp_arg a
   | IRet -> Fmt.pf fmt "  ret" 
 
 let pp_instrs : (instruction list) Fmt.t =
