@@ -4,9 +4,20 @@ type value =
 | NumV of int64
 | BoolV of bool
 
+(** Pretty printing **)
+
+(* printing values and expressions *)
+let pp_value : value Fmt.t =
+  fun fmt e -> 
+    match e with 
+    | NumV n -> Fmt.int64 fmt n
+    | BoolV p -> Fmt.bool fmt p
+
 (* Lifting functions on int to values *)
 let liftNumV ( op : int64 -> int64) : value -> value =
-  function | NumV n -> NumV (op n)
+  function
+  | NumV n -> NumV (op n)
+  | x -> Fmt.failwith "(liftNumV) type error: expected int64, got: %a" pp_value x
 
 
 open Expr
@@ -29,13 +40,3 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
   | Add1 e -> liftNumV (Int64.add 1L) (interp ~env:env e) 
   | Sub1 e -> liftNumV (Int64.add (-1L)) (interp ~env:env e)
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
-
-
-(** Pretty printing **)
-
-(* printing values and expressions *)
-let pp_value : value Fmt.t =
-  fun fmt e -> 
-    match e with 
-    | NumV n -> Fmt.int64 fmt n
-    | BoolV p -> Fmt.bool fmt p
