@@ -48,5 +48,6 @@ let rec parse (sexp : sexp) : expr =
   | `List [`Atom "+" ; l ; r ] -> BinOp (Add, parse l, parse r)
   | `List [`Atom "-" ; l ; r ] -> BinOp (Sub, parse l, parse r)
   | `List [`Atom "*" ; l ; r ] -> BinOp (Mul, parse l, parse r)
+  | `List [`Atom "/" ; l ; r ] -> BinOp (Div, parse l, parse r)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse e, parse body)
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e

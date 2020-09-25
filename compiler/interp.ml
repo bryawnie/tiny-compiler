@@ -41,6 +41,7 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
       | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
       | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
+      | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
       end
 
 

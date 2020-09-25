@@ -3,6 +3,7 @@ type binOp =
   | Add
   | Sub
   | Mul
+  | Div
 
 (* 
   <expr> ::= number
@@ -36,4 +37,5 @@ let rec pp_expr fmt = function
       | Add -> pf fmt "(+ %a %a)"  pp_expr x1 pp_expr x2
       | Sub -> pf fmt "(- %a %a)"  pp_expr x1 pp_expr x2
       | Mul -> pf fmt "(* %a %a)"  pp_expr x1 pp_expr x2
+      | Div -> pf fmt "(/ %a %a)"  pp_expr x1 pp_expr x2
       end

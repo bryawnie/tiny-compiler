@@ -44,6 +44,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         | Add -> [IAdd (Reg RAX, RegOffset (RSP, slot))]
         | Sub -> [ISub (Reg RAX, RegOffset (RSP, slot))]
         | Mul -> [IMul (Reg RAX, RegOffset (RSP, slot))] @ [ISar (Reg RAX, Const 1L)]
+        | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))] @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)] @ [ISal (Reg RAX, Const 1L)]
       in
       compiled_right @ save_right @ compiled_left @ apply_op
 
