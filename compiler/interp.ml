@@ -16,6 +16,12 @@ let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
     | NumV n1, NumV n2 -> NumV (op n1 n2)
     | _ -> Fmt.failwith "Error: Numeric binop applied to non numeric values"
 
+let liftIf : value -> value -> value -> value =
+  fun c tb fb ->
+    match c with
+    | BoolV cond -> if cond then tb else fb
+    | _       -> Fmt.failwith "Error: Non boolean condition in If sentence"
+
 open Expr
 
 (** Environment **)
@@ -33,8 +39,11 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
   | Num n -> NumV n
   | Bool p -> BoolV p
   | Id x -> List.assoc x env
-  | Add1 e -> liftNumV (Int64.add) (NumV 1L) (interp ~env:env e) 
-  | Sub1 e -> liftNumV (Int64.add) (NumV (-1L)) (interp ~env:env e) 
+  | SingOp (op, e) ->
+      begin match op with
+      | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)
+      | Sub1 -> liftNumV (Int64.sub) (interp ~env:env e) (NumV 1L) 
+      end
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
   | BinOp (op,l,r) -> 
       begin match op with 
@@ -43,6 +52,7 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
       | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
       end
+  | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
 
 
 (** Pretty printing **)

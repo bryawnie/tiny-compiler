@@ -1,0 +1,6 @@
+NAME: A more complex if Sentence
+DESCRIPTION: Tests the support of if sentences
+SRC: 
+(let (x (if false 5 (if true (add1 6) 5))) (* 2 x))
+EXPECTED: 
+14

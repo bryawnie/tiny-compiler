@@ -1,0 +1,6 @@
+NAME: If Sentence
+DESCRIPTION: Tests the support of if sentences
+SRC: 
+(if true 5 6)
+EXPECTED: 
+5

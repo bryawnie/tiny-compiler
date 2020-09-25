@@ -1,7 +1,7 @@
 open Expr
 open Asm
 
-let gensym =
+let gensym  =
   let counter = ref 0 in 
   (fun basename ->
     counter := !counter + 1;
@@ -27,8 +27,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Num n -> [ IMov (Reg RAX, encode_int n) ]
   | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
   | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
-  | Add1 e -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
-  | Sub1 e -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
+  | SingOp (op, e) ->
+      begin match op with
+      | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
+      | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
+      end
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -47,6 +50,18 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))] @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)] @ [ISal (Reg RAX, Const 1L)]
       in
       compiled_right @ save_right @ compiled_left @ apply_op
+  | If (c, t, f) -> 
+    let else_label = (gensym "if_false") in
+    let done_label = (gensym "done") in
+    (compile_expr c env) @
+    [
+      ICmp (Reg RAX, Const false_encoding);
+      IJe  (else_label)
+    ]
+    @ (compile_expr t env)
+    @ [ IJmp (done_label); ILabel(else_label) ]
+    @ (compile_expr f env)
+    @ [ ILabel(done_label) ]
 
 
 let compile_prog : expr Fmt.t =

@@ -18,7 +18,7 @@ let parse_tests =
   let test_parse_compound () =
     check expr "same expr"
       (parse (`List [`Atom "add1" ; `List [`Atom "sub1" ; `Atom "3"; ]]))
-      (Add1 (Sub1 (Num 3L)))
+      (SingOp (Add1, SingOp (Sub1, (Num 3L))))
   in
 
   (* An example of a test catching an error *)
@@ -50,7 +50,7 @@ let interp_tests =
 
   let test_interp_compound () =
     check value "same int"
-      (interp (Add1 (Add1 (Num 40L))))
+      (interp (SingOp (Add1, (SingOp (Add1, (Num 40L))))))
       (NumV 42L)
   in
 

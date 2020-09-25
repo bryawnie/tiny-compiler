@@ -35,6 +35,10 @@ type instruction =
 | IDiv of arg
 | ISar of arg * arg
 | ISal of arg * arg
+| ICmp of arg * arg
+| IJe  of string
+| IJmp of string
+| ILabel of string
 | IRet
 
 let pp_reg : reg Fmt.t =
@@ -55,14 +59,18 @@ let pp_arg : arg Fmt.t =
 let pp_instr : instruction Fmt.t =
   fun fmt instr ->
   match instr with
-  | IMov (a1, a2) -> Fmt.pf fmt "  mov %a, %a" pp_arg a1 pp_arg a2
-  | IAdd (a1, a2) -> Fmt.pf fmt "  add %a, %a" pp_arg a1 pp_arg a2
-  | ISub (a1, a2) -> Fmt.pf fmt "  sub %a, %a" pp_arg a1 pp_arg a2
-  | IMul (a1, a2) -> Fmt.pf fmt "  imul %a, %a" pp_arg a1 pp_arg a2
-  | IDiv a        -> Fmt.pf fmt "  idiv %a" pp_arg a
-  | ISar (a1, a2) -> Fmt.pf fmt "  sar %a, %a" pp_arg a1 pp_arg a2
-  | ISal (a1, a2) -> Fmt.pf fmt "  sal %a, %a" pp_arg a1 pp_arg a2
-  | IRet -> Fmt.pf fmt "  ret" 
+  | IMov (a1, a2) -> Fmt.pf fmt "   mov  %a, %a" pp_arg a1 pp_arg a2
+  | IAdd (a1, a2) -> Fmt.pf fmt "   add  %a, %a" pp_arg a1 pp_arg a2
+  | ISub (a1, a2) -> Fmt.pf fmt "   sub  %a, %a" pp_arg a1 pp_arg a2
+  | IMul (a1, a2) -> Fmt.pf fmt "   imul %a, %a" pp_arg a1 pp_arg a2
+  | IDiv a        -> Fmt.pf fmt "   idiv %a" pp_arg a
+  | ISar (a1, a2) -> Fmt.pf fmt "   sar  %a, %a" pp_arg a1 pp_arg a2
+  | ISal (a1, a2) -> Fmt.pf fmt "   sal  %a, %a" pp_arg a1 pp_arg a2
+  | ICmp (a1, a2) -> Fmt.pf fmt "   cmp  %a, %a" pp_arg a1 pp_arg a2
+  | IJe  lbl      -> Fmt.pf fmt "   je   %a" Fmt.string lbl
+  | IJmp lbl      -> Fmt.pf fmt "   jmp  %a" Fmt.string lbl
+  | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
+  | IRet          -> Fmt.pf fmt "   ret" 
 
 let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr
