@@ -1,6 +1,6 @@
-NAME: Multipliying with lets
-DESCRIPTION: tests how does work the multipliying
+NAME: Simple product
+DESCRIPTION: a simple product
 SRC:
-(* (* 2 2) (* 2 (let (x 2) (add1 (* 3 x)))))
+(* 2 3)
 EXPECTED:
-56
+6

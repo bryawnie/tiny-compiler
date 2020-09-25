@@ -14,7 +14,7 @@ let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
     | NumV n1, NumV n2 -> NumV (op n1 n2)
-    (* | _ -> Fmt.failwith "Error: Binop applied to non numeric value"  *)
+    | _ -> Fmt.failwith "Error: Numeric binop applied to non numeric values"
 
 open Expr
 

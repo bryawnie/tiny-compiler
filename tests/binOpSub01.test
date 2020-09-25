@@ -1,6 +1,6 @@
-NAME: Substraction with let
-DESCRIPTION: tests how does work the Substraction
+NAME: Simple Substraction 
+DESCRIPTION: A simple Substraction
 SRC:
-(- (- 9 4) (- 8 (let (x 5) (sub1 x))))
+(- 5 3)
 EXPECTED:
-1
+2
