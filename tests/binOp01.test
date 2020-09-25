@@ -1,0 +1,6 @@
+NAME: Testing all binops
+DESCRIPTION: This proves everything (on binops)
+SRC:
+(* (+ 1 4) (- 5 (sub1 3)))
+EXPECTED:
+15

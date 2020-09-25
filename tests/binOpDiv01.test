@@ -1,0 +1,6 @@
+NAME: Simple Divide
+DESCRIPTION: divides a number
+SRC:
+(/ 8 4)
+EXPECTED:
+2

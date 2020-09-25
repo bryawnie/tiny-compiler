@@ -1,0 +1,6 @@
+NAME: Simple product
+DESCRIPTION: a simple product
+SRC:
+(* 2 3)
+EXPECTED:
+6

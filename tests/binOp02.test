@@ -1,0 +1,6 @@
+NAME: Testing All Operators
+DESCRIPTION: Arithmetic
+SRC:
+(+ (/ 8 4) (* (- 5 (add1 (/ 27 9))) (sub1 4)))
+EXPECTED:
+5
