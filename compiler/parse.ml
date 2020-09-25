@@ -50,4 +50,4 @@ let rec parse (sexp : sexp) : expr =
   | `List [`Atom "and" ; p ; q] -> And (parse p, parse q)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] ->
     Let (id, parse e, parse body)
-  | e -> Fmt.failwith "Not a valid expression: %a" CCSexp.pp e
+  | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
