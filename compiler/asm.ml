@@ -5,45 +5,34 @@ type reg =
 | RDX
 | RSP
 
-(** Environment **)
-type env = (string * int) list
-
-let empty_env : env = []
-
-let rec lookup (name: string) (env: env) : int =
-  match env with
-  | [] -> failwith (Format.sprintf "Identifier %s not found in environment" name)
-  | (n, i)::rest -> if n = name then i else (lookup name rest)
-
-let extend_env (name: string) (env: env) : (env * int) =
-  let slot = 1 + (List.length env) in
-  ((name, slot)::env, slot) 
-
 
 (* arguments for instructions *)
 type arg =
-| Const of int64
-| Reg of reg
-| RegOffset of reg * int
+| Const of int64          (* Constant of 64 bits *)
+| Reg of reg              (* Register *)
+| RegOffset of reg * int  (* Reg and its offset *)
+
 
 (* asm instructions *)
 type instruction =
-| IMov of arg * arg
-| IAdd of arg * arg
-| IOr of arg * arg (* Bitwise logical or *)
-| IAnd of arg * arg (* Bitwase logical and *)
-| INeg of arg (* Arithmetic/2's complement negation *)
-| ISub of arg * arg
-| IMul of arg * arg
-| IDiv of arg
-| ISar of arg * arg
-| ISal of arg * arg
-| ICmp of arg * arg
-| IJe  of string
-| IJmp of string
-| ILabel of string
-| IRet
+| IMov of arg * arg   (* Move *)
+| IAdd of arg * arg   (* Adition *)
+| ISub of arg * arg   (* Substraction *)
+| IOr  of arg * arg   (* Bitwise logical or *)
+| IAnd of arg * arg   (* Bitwase logical and *)
+| INeg of arg         (* Arithmetic/2's complement negation *)
+| IMul of arg * arg   (* Arithmetic Product*)
+| IDiv of arg         (* Divides RDX RAX / arg *)
+| ISar of arg * arg   (* Arithmetic Right Shift *)
+| ISal of arg * arg   (* Arithmetic Left Shift *)
+| ICmp of arg * arg   (* Comparer *)
+| IJe  of string      (* Jumps if equal *)
+| IJmp of string      (* Makes a jump *)
+| ILabel of string    (* Simple Label *)
+| IRet                (* Return *)
 
+
+(* A pretty printing for registers *)
 let pp_reg : reg Fmt.t =
   fun fmt r ->
     match r with
@@ -52,6 +41,8 @@ let pp_reg : reg Fmt.t =
     | RDX -> Fmt.string fmt "RDX"
     | RSP -> Fmt.string fmt "RSP"
 
+
+(* A pretty printing for args *)
 let pp_arg : arg Fmt.t =
   fun fmt arg ->
     match arg with
@@ -59,6 +50,8 @@ let pp_arg : arg Fmt.t =
     | Reg r           -> pp_reg fmt r
     | RegOffset (r,i) -> Fmt.pf fmt "[%a - %a]" pp_reg r Fmt.int (8*i)
 
+
+(* A pretty printing for instruction *)
 let pp_instr : instruction Fmt.t =
   fun fmt instr ->
   match instr with
@@ -74,9 +67,11 @@ let pp_instr : instruction Fmt.t =
   | IJmp lbl      -> Fmt.pf fmt "   jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | IRet          -> Fmt.pf fmt "   ret" 
-  | IOr (a1, a2) -> Fmt.pf fmt "  or %a, %a" pp_arg a1 pp_arg a2
-  | IAnd (a1, a2) -> Fmt.pf fmt "  and %a, %a" pp_arg a1 pp_arg a2
-  | INeg a -> Fmt.pf fmt "  neg %a" pp_arg a
+  | IOr (a1, a2)  -> Fmt.pf fmt "   or   %a, %a" pp_arg a1 pp_arg a2
+  | IAnd (a1, a2) -> Fmt.pf fmt "   and  %a, %a" pp_arg a1 pp_arg a2
+  | INeg a        -> Fmt.pf fmt "   neg  %a" pp_arg a
 
+
+(* A pretty printing for instruction list *)
 let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr
