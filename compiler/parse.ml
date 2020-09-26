@@ -43,11 +43,11 @@ let rec parse (sexp : sexp) : expr =
       | Some n -> Num n
       | None -> Id s (*Fmt.failwith "Not a known atom: %s" s*)
     end
-  | `List [`Atom "add1" ; e ] -> SingOp (Add1, parse e) 
-  | `List [`Atom "sub1" ; e ] -> SingOp (Sub1, parse e)
-  | `List [`Atom "not" ; e ] -> Not (parse e)
-  | `List [`Atom "or" ; p ; q] -> Or (parse p, parse q)
-  | `List [`Atom "and" ; p ; q] -> And (parse p, parse q)
+  | `List [`Atom "add1" ; e ] -> UnOp (Add1, parse e) 
+  | `List [`Atom "sub1" ; e ] -> UnOp (Sub1, parse e)
+  | `List [`Atom "not" ; e ] -> UnOp (Not, parse e)
+  | `List [`Atom "or" ; p ; q] -> BinOp (Or, parse p, parse q)
+  | `List [`Atom "and" ; p ; q] -> BinOp (And, parse p, parse q)
   | `List [`Atom "+" ; l ; r ] -> BinOp (Add, parse l, parse r)
   | `List [`Atom "-" ; l ; r ] -> BinOp (Sub, parse l, parse r)
   | `List [`Atom "*" ; l ; r ] -> BinOp (Mul, parse l, parse r)
