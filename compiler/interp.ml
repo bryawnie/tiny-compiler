@@ -25,6 +25,7 @@ let liftBoolV (op: bool -> bool) : value -> value =
   | BoolV p -> BoolV (op p)
   | q -> Fmt.failwith "(liftBoolV) type error: expected bool, got: %a" pp_value q
  *)
+
 (* Lifting functions on int to values *)
 let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
   fun op e1 e2 ->
@@ -43,7 +44,7 @@ let liftIf : value -> value -> value -> value =
   fun c tb fb ->
     match c with
     | BoolV cond -> if cond then tb else fb
-    | _       -> Fmt.failwith "Error: Non boolean condition in If sentence"
+    | _ -> Fmt.failwith "Error: Non boolean condition in If sentence"
 
 open Expr
 
@@ -55,9 +56,7 @@ let empty_env : env = []
 let extend_env : string -> value -> env -> env =
     fun x v env -> (x, v) :: env
 
-(** Interpreter *)
-
-(* THIS IS IN DIRE NEED OF REFACTORING *)
+(** Interpreter **)
 let rec interp ?(env=empty_env) (e : expr)  : value =
   match e with 
   | Num n -> NumV n

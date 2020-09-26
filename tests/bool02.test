@@ -1,5 +1,5 @@
 NAME: Boolean datatype
 DESCRIPTION: checks that boolean values are supported
-SRC: true
+SRC: (let (p false) p)
 EXPECTED: 
-true
+false

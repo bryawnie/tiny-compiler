@@ -1,0 +1,3 @@
+NAME: Boolean NOT operator
+SRC: (not false)
+EXPECTED: true
