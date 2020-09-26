@@ -30,6 +30,9 @@ type arg =
 type instruction =
 | IMov of arg * arg
 | IAdd of arg * arg
+| IOr of arg * arg (* Bitwise logical or *)
+| IAnd of arg * arg (* Bitwase logical and *)
+| INeg of arg (* Arithmetic/2's complement negation *)
 | ISub of arg * arg
 | IMul of arg * arg
 | IDiv of arg
@@ -71,6 +74,9 @@ let pp_instr : instruction Fmt.t =
   | IJmp lbl      -> Fmt.pf fmt "   jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | IRet          -> Fmt.pf fmt "   ret" 
+  | IOr (a1, a2) -> Fmt.pf fmt "  or %a, %a" pp_arg a1 pp_arg a2
+  | IAnd (a1, a2) -> Fmt.pf fmt "  and %a, %a" pp_arg a1 pp_arg a2
+  | INeg a -> Fmt.pf fmt "  neg %a" pp_arg a
 
 let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr

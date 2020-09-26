@@ -23,6 +23,9 @@ type expr =
   | Id of string
   | SingOp of singOp * expr
   | Let of string * expr * expr
+  | Not of expr
+  | And of expr * expr
+  | Or of expr * expr
   | BinOp of binOp * expr * expr
   | If of expr * expr * expr
 open Fmt
@@ -37,6 +40,9 @@ let rec pp_expr fmt = function
       | Sub1 -> pf fmt "(sub1 %a)" pp_expr e
       end
   | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
+  | Not p -> pf fmt "(not %a)" pp_expr p
+  | And (p, q) -> pf fmt "(and %a %a)" pp_expr p pp_expr q
+  | Or (p, q) -> pf fmt "(or %a %a)" pp_expr p pp_expr q
   | BinOp (op, x1, x2) -> 
       begin match op with
       | Add -> pf fmt "(+ %a %a)"  pp_expr x1 pp_expr x2

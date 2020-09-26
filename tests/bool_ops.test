@@ -1,0 +1,4 @@
+NAME: Boolean operations
+DESCRIPTION: (and (or true false) (not false))
+SRC: (let (p true) (let (q false) (and (or p q) (not q))))
+EXPECTED: true

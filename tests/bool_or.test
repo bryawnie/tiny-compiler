@@ -1,0 +1,3 @@
+NAME: Boolean OR operator
+SRC: (or false true)
+EXPECTED: true

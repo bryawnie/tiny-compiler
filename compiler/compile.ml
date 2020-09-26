@@ -29,15 +29,19 @@ let encode_bool (b: bool) : arg =
   if b then Const true_encoding else Const false_encoding
 
 let rec compile_expr (e : expr) (env: env) : instruction list =
+  (* pattern for binary operations (Add, Mul, etc...) *)
+  let compile_binop (op: arg * arg -> instruction)
+    (env: env) (e1:expr) (e2:expr) : instruction list =
+    compile_expr e1 env @ [IMov (Reg RAX, Reg RBX)] @
+    compile_expr e2 env @ [op (Reg RBX, Reg RAX)]
+  in
   match e with 
   | Num n -> [ IMov (Reg RAX, encode_int n) ]
   | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
   | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
-  | SingOp (op, e) ->
-      begin match op with
-      | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
-      | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
-      end
+  | Not e -> compile_expr e env @ [INeg (Reg RAX)]
+  | And (p, q) -> compile_binop (function a, b -> IAnd(a,b)) env p q
+  | Or (p, q) -> compile_binop (function a, b -> IOr(a,b)) env p q
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -52,8 +56,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         match op with
         | Add -> [IAdd (Reg RAX, RegOffset (RSP, slot))]
         | Sub -> [ISub (Reg RAX, RegOffset (RSP, slot))]
-        | Mul -> [IMul (Reg RAX, RegOffset (RSP, slot))] @ [ISar (Reg RAX, Const 1L)]
-        | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))] @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)] @ [ISal (Reg RAX, Const 1L)]
+        | Mul -> [IMul (Reg RAX, RegOffset (RSP, slot))]
+          @ [ISar (Reg RAX, Const 1L)]
+        | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))]
+          @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)]
+          @ [ISal (Reg RAX, Const 1L)]
       in
       compiled_right @ save_right @ compiled_left @ apply_op
   | If (c, t, f) -> 
