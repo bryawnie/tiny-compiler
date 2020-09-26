@@ -1,9 +1,17 @@
+
+type binOp =
+  | Add
+  | Sub
+  | Mul
+  | Div
+
 (* 
   <expr> ::= number
         | id 
         | (add1 <expr>)
         | (sub1 <expr>)
         | (let (<id> <expr>) <expr>)
+        | (+ <expr> <expr>)
 *)
 
 type expr = 
@@ -16,6 +24,7 @@ type expr =
   | Not of expr
   | And of expr * expr
   | Or of expr * expr
+  | BinOp of binOp * expr * expr
 
 open Fmt
 
@@ -29,3 +38,10 @@ let rec pp_expr fmt = function
   | Not p -> pf fmt "(not %a)" pp_expr p
   | And (p, q) -> pf fmt "(and %a %a)" pp_expr p pp_expr q
   | Or (p, q) -> pf fmt "(or %a %a)" pp_expr p pp_expr q
+  | BinOp (op, x1, x2) -> 
+      begin match op with
+      | Add -> pf fmt "(+ %a %a)"  pp_expr x1 pp_expr x2
+      | Sub -> pf fmt "(- %a %a)"  pp_expr x1 pp_expr x2
+      | Mul -> pf fmt "(* %a %a)"  pp_expr x1 pp_expr x2
+      | Div -> pf fmt "(/ %a %a)"  pp_expr x1 pp_expr x2
+      end

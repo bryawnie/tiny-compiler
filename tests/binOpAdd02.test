@@ -1,0 +1,6 @@
+NAME: Compound Simple Adition
+DESCRIPTION: increments a number
+SRC:
+(+ (+ 9 4) (+ 8 7))
+EXPECTED:
+28

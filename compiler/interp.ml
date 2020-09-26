@@ -29,6 +29,13 @@ let liftBoolV (op: bool -> bool) : value -> value =
 (*let liftValue (op: 'a -> 'b) : value -> value = ...*)
 
 
+(* Lifting functions on int to values *)
+let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
+  fun op e1 e2 ->
+    match e1, e2 with
+    | NumV n1, NumV n2 -> NumV (op n1 n2)
+    | _ -> Fmt.failwith "Error: Numeric binop applied to non numeric values"
+
 open Expr
 
 (** Environment **)
@@ -52,3 +59,11 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
   | Or (p, q) -> BoolV false (* FIXME *)
   | And (p, q) -> BoolV false (* FIXME *)
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
+  | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
+  | BinOp (op,l,r) -> 
+      begin match op with 
+      | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
+      | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
+      | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
+      | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
+      end

@@ -1,0 +1,6 @@
+NAME: Simple Addition
+DESCRIPTION: increments a number
+SRC:
+(+ 5 3)
+EXPECTED:
+8

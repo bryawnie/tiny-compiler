@@ -1,0 +1,6 @@
+NAME: Multipliying with lets
+DESCRIPTION: tests how does work the multipliying
+SRC:
+(* (* 2 2) (* 2 (let (x 2) (add1 (* 3 x)))))
+EXPECTED:
+56
