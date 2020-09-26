@@ -27,6 +27,7 @@ type instruction =
 | ISal of arg * arg   (* Arithmetic Left Shift *)
 | ICmp of arg * arg   (* Comparer *)
 | IJe  of string      (* Jumps if equal *)
+| IJl  of string      (* Jumps if less than *)
 | IJmp of string      (* Makes a jump *)
 | ILabel of string    (* Simple Label *)
 | IRet                (* Return *)
@@ -64,6 +65,7 @@ let pp_instr : instruction Fmt.t =
   | ISal (a1, a2) -> Fmt.pf fmt "   sal  %a, %a" pp_arg a1 pp_arg a2
   | ICmp (a1, a2) -> Fmt.pf fmt "   cmp  %a, %a" pp_arg a1 pp_arg a2
   | IJe  lbl      -> Fmt.pf fmt "   je   %a" Fmt.string lbl
+  | IJl  lbl      -> Fmt.pf fmt "   jl   %a" Fmt.string lbl
   | IJmp lbl      -> Fmt.pf fmt "   jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | IRet          -> Fmt.pf fmt "   ret" 

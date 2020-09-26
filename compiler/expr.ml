@@ -12,6 +12,8 @@ type binOp =
   | Div
   | And
   | Or
+  | Less 
+  | Eq
 
 (* 
   <expr> ::= 
@@ -22,10 +24,10 @@ type binOp =
   | (sub1 <expr>)
   | (not <expr>)
   | (let (<id> <expr>) <expr>)
-  | (+  <expr> <expr>)
-  | (-  <expr> <expr>)
-  | (\* <expr> <expr>)
-  | (/  <expr> <expr>)
+  | ( + <expr> <expr>)
+  | ( - <expr> <expr>)
+  | ( * <expr> <expr>)
+  | ( / <expr> <expr>)
   | (and <expr> <expr>)
   | (or  <expr> <expr>)
   | (if  <expr> <expr> <expr> )
@@ -52,12 +54,14 @@ let pp_unop fmt = function op ->
 
 let pp_binop fmt = function op ->
   let str = match op with
-  | Add -> "+"
-  | Sub -> "-"
-  | Mul -> "*"
-  | Div -> "/"
-  | And -> "and"
-  | Or -> "or"
+  | Add  -> "+"
+  | Sub  -> "-"
+  | Mul  -> "*"
+  | Div  -> "/"
+  | And  -> "and"
+  | Or   -> "or"
+  | Less -> "<"
+  | Eq   -> "="
   in string fmt str
 
 (* Pretty printer for expresions *)

@@ -46,18 +46,31 @@ let liftIf : value -> value -> value -> value =
     | BoolV cond -> if cond then tb else fb
     | _ -> Fmt.failwith "Error: Non boolean condition in If sentence"
 
+let liftCompV : (int64 -> int64 -> bool) -> value -> value -> value =
+  fun op e1 e2 ->
+    match e1, e2 with
+    | NumV n1, NumV n2 -> BoolV (op n1 n2)
+    | _ -> Fmt.failwith "Error: Numeric comparer applied to non numeric values"
+
+let liftEqV : value -> value -> value =
+  fun e1 e2 ->
+    match e1, e2 with
+    | NumV n1, NumV n2 -> BoolV (n1 = n2)
+    | BoolV n1, BoolV n2 -> BoolV (n1 = n2)
+    | _ -> BoolV false
+
 open Expr
 
 (** Interpreter Environment **)
-type env = (string * value) list
+type ienv = (string * value) list
 
-let empty_env : env = []
+let mt_ienv : ienv = []
   
-let extend_env : string -> value -> env -> env =
-    fun x v env -> (x, v) :: env
+let extend_ienv : string -> value -> ienv -> ienv =
+    fun x v ienv -> (x, v) :: ienv
 
 (** Interpreter **)
-let rec interp ?(env=empty_env) (e : expr)  : value =
+let rec interp ?(env=mt_ienv) (e : expr)  : value =
   match e with 
   | Num n -> NumV n
   | Bool p -> BoolV p
@@ -72,14 +85,16 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
         | _ -> Fmt.failwith "Error: Non boolean expr in Not sentence"
         end
       end
-  | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
+  | Let (id, v, b) -> interp ~env:(extend_ienv id (interp ~env:env v) env) b
   | BinOp (op,l,r) -> 
       begin match op with 
       | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
       | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
       | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
-      | Or -> liftBoolV (||) (interp ~env:env l) (interp ~env:env r)
+      | Or  -> liftBoolV (||) (interp ~env:env l) (interp ~env:env r)
       | And -> liftBoolV (&&) (interp ~env:env l) (interp ~env:env r)
+      | Less -> liftCompV (<) (interp ~env:env l) (interp ~env:env r)
+      | Eq  -> liftEqV (interp ~env:env l) (interp ~env:env r)
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
