@@ -12,7 +12,7 @@ let pp_value : value Fmt.t =
     match e with 
     | NumV n -> Fmt.int64 fmt n
     | BoolV p -> Fmt.bool fmt p
-
+(* 
 (* Lifting functions on int to values *)
 let liftNumV ( op : int64 -> int64) : value -> value =
   function
@@ -24,17 +24,20 @@ let liftBoolV (op: bool -> bool) : value -> value =
   function
   | BoolV p -> BoolV (op p)
   | q -> Fmt.failwith "(liftBoolV) type error: expected bool, got: %a" pp_value q
-
-(* Should probably add a generalized lifter *)
-(*let liftValue (op: 'a -> 'b) : value -> value = ...*)
-
-
+ *)
 (* Lifting functions on int to values *)
 let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
     | NumV n1, NumV n2 -> NumV (op n1 n2)
     | _ -> Fmt.failwith "Error: Numeric binop applied to non numeric values"
+
+let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
+  fun op e1 e2 ->
+    match e1, e2 with
+    | BoolV p, BoolV q -> BoolV (op p q)
+    | _ -> Fmt.failwith "TypeError: expected boolean values but got %a and %a"
+            pp_value e1 pp_value e2
 
 open Expr
 
@@ -48,17 +51,18 @@ let extend_env : string -> value -> env -> env =
 
 (** Interpreter *)
 
+(* THIS IS IN DIRE NEED OF REFACTORING *)
 let rec interp ?(env=empty_env) (e : expr)  : value =
   match e with 
   | Num n -> NumV n
   | Bool p -> BoolV p
   | Id x -> List.assoc x env
-  | Add1 e -> liftNumV (Int64.add 1L) (interp ~env:env e) 
-  | Sub1 e -> liftNumV (Int64.add (-1L)) (interp ~env:env e)
-  | Not e -> liftBoolV (not) (interp ~env:env e)
-  | Or (p, q) -> BoolV false (* FIXME *)
-  | And (p, q) -> BoolV false (* FIXME *)
-  | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
+  | Add1 e -> liftNumV (Int64.add) (NumV 1L) (interp ~env:env e) 
+  | Sub1 e -> liftNumV (Int64.sub) (NumV 1L) (interp ~env:env e)
+  | Not e -> (match (interp ~env:env e) with BoolV p -> BoolV (not p)
+              | _ -> Fmt.failwith "TypeError: not a boolean value") 
+  | Or (p, q) -> liftBoolV (||) (interp ~env:env p) (interp ~env:env q)
+  | And (p, q) -> liftBoolV (&&) (interp ~env:env p) (interp ~env:env q)
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b
   | BinOp (op,l,r) -> 
       begin match op with 
