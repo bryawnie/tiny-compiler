@@ -68,7 +68,11 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
       | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)
       | Sub1 -> liftNumV (Int64.sub) (interp ~env:env e) (NumV 1L) 
       end
-  | Not e -> (match (interp ~env:env e) with BoolV p -> BoolV (not p)
+  | Not e ->
+      begin match (interp ~env:env e) with 
+      | BoolV p -> BoolV (not p)
+      | _ -> Fmt.failwith "Error: Non boolean expr in Not sentence"
+      end
   | Or (p, q) -> liftBoolV (||) (interp ~env:env p) (interp ~env:env q)
   | And (p, q) -> liftBoolV (&&) (interp ~env:env p) (interp ~env:env q)
   | Let (id, v, b) -> interp ~env:(extend_env id (interp ~env:env v) env) b

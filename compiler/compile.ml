@@ -38,6 +38,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
   | Num n -> [ IMov (Reg RAX, encode_int n) ]
   | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
+  | SingOp (op, e) ->
+      begin match op with
+      | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
+      | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
+    end
   | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
   | Not e -> compile_expr e env @ [INeg (Reg RAX)]
   | And (p, q) -> compile_binop (function a, b -> IAnd(a,b)) env p q
