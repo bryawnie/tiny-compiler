@@ -14,12 +14,21 @@ type binOp =
   | Or
 
 (* 
-  <expr> ::= number
-        | id 
-        | (add1 <expr>)
-        | (sub1 <expr>)
-        | (let (<id> <expr>) <expr>)
-        | (+ <expr> <expr>)
+  <expr> ::= 
+  | number
+  | bool
+  | id 
+  | (add1 <expr>)
+  | (sub1 <expr>)
+  | (not <expr>)
+  | (let (<id> <expr>) <expr>)
+  | (+  <expr> <expr>)
+  | (-  <expr> <expr>)
+  | (\* <expr> <expr>)
+  | (/  <expr> <expr>)
+  | (and <expr> <expr>)
+  | (or  <expr> <expr>)
+  | (if  <expr> <expr> <expr> )
 *)
 
 type expr = 
@@ -30,9 +39,10 @@ type expr =
   | BinOp of binOp * expr * expr
   | Let of string * expr * expr
   | If of expr * expr * expr
+
 open Fmt
 
-(* pretty print operator*)
+(* Pretty printer for operators *)
 let pp_unop fmt = function op ->
   let str = match op with
   | Add1 -> "add1"
@@ -50,6 +60,7 @@ let pp_binop fmt = function op ->
   | Or -> "or"
   in string fmt str
 
+(* Pretty printer for expresions *)
 let rec pp_expr fmt = function
   | Num n -> int64 fmt n
   | Bool b -> bool fmt b

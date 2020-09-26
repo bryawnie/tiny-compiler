@@ -47,7 +47,7 @@ let liftIf : value -> value -> value -> value =
 
 open Expr
 
-(** Environment **)
+(** Interpreter Environment **)
 type env = (string * value) list
 
 let empty_env : env = []
