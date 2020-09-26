@@ -18,7 +18,7 @@ let parse_tests =
   let test_parse_compound () =
     check expr "same expr"
       (parse (`List [`Atom "add1" ; `List [`Atom "sub1" ; `Atom "3"; ]]))
-      (Add1 (Sub1 (Num 3L)))
+      (SingOp (Add1, SingOp (Sub1, (Num 3L))))
   in
 
   (* An example of a test catching an error *)
@@ -50,8 +50,29 @@ let interp_tests =
 
   let test_interp_compound () =
     check value "same int"
-      (interp (Add1 (Add1 (Num 40L))))
+      (interp (SingOp (Add1, (SingOp (Add1, (Num 40L))))))
       (NumV 42L)
+  in
+
+  let test_interp_not () =
+    check value "not true = false"
+      (BoolV false)
+      (interp (Not (Bool true))) ;
+    check value "not false = true"
+      (BoolV true)
+      (interp (Not (Bool false)))
+  in
+
+  let test_interp_bool_ops () = 
+    check value "and"
+      (BoolV true)
+      (interp (And (Bool true, Bool true))) ;
+    check value "or" 
+      (BoolV false)
+      (interp (Or (Bool false, Bool false))) ;
+    check value "compound expression"
+     (BoolV false)
+     (interp (And (Bool true, Or (Bool false, Not (Bool true)))))
   in
 
   "interp", [
@@ -59,7 +80,9 @@ let interp_tests =
       The tests here only concern the interpreter, so we tag them as slow.
       Set the ALCOTEST_QUICK_TESTS environment variable (to =1 for instance) to disable slow tests. *)
     test_case "A number" `Slow test_interp_num ;
-    test_case "A compound expression" `Slow test_interp_compound
+    test_case "A compound expression" `Slow test_interp_compound ;
+    test_case "Boolean negation (not)" `Slow test_interp_not ;
+    test_case "Boolean operators" `Slow test_interp_bool_ops ;
   ]
 
 

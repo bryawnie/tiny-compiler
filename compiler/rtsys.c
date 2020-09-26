@@ -11,7 +11,7 @@ const val BOOL_TRUE = -1;
 const val BOOL_FALSE = 1;
 
 void print_value(val v) {
-  if (!(v & BOOL_BITMASK)) {// integer
+  if (!(v & BOOL_BITMASK)) { // integer
     printf("%ld", v >> 1);
   } else if (v == BOOL_TRUE) {
     printf("true");
