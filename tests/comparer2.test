@@ -1,0 +1,6 @@
+NAME: Less (<) test (with if)
+DESCRIPTION: Tests the support of <
+SRC: 
+(if (< 2 (* 2 3)) 7 8)
+EXPECTED: 
+7
