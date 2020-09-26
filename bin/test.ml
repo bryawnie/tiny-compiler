@@ -63,6 +63,37 @@ let interp_tests =
       (interp (UnOp (Not, Bool false)))
   in
 
+  let test_interp_and () =
+    check value "true and true = true"
+      (BoolV true)
+      (interp (BinOp (And, Bool true, Bool true))) ;
+    check value "true and false = false"
+      (BoolV false)
+      (interp (BinOp (And, Bool true, Bool false))) ;
+    check value "false and true = false"
+      (BoolV false)
+      (interp (BinOp (And, Bool false, Bool true))) ;
+    check value "false and false = false"
+       (BoolV false)
+       (interp (BinOp (And, Bool false, Bool false)))
+  in
+
+  let test_interp_or () = 
+    check value "true or true = true"
+      (BoolV true)
+      (interp (BinOp (Or, Bool true, Bool true))) ;
+    check value "true or false = true"
+      (BoolV true)
+      (interp (BinOp (Or, Bool true, Bool false))) ;
+    check value "false or true = true"
+      (BoolV true)
+      (interp (BinOp (Or, Bool false, Bool true))) ;
+    check value "false or false = false"
+      (BoolV false)
+      (interp (BinOp (Or, Bool false, Bool false)))
+  in
+
+
   let test_interp_bool_ops () = 
     check value "and"
       (BoolV true)
@@ -81,8 +112,10 @@ let interp_tests =
       Set the ALCOTEST_QUICK_TESTS environment variable (to =1 for instance) to disable slow tests. *)
     test_case "A number" `Slow test_interp_num ;
     test_case "A compound expression" `Slow test_interp_compound ;
-    test_case "Boolean negation (not)" `Slow test_interp_not ;
-    test_case "Boolean operators" `Slow test_interp_bool_ops ;
+    test_case "Boolean negation" `Slow test_interp_not ;
+    test_case "Boolean disyunction" `Slow test_interp_or ;
+    test_case "Boolean conjunction" `Slow test_interp_and ;
+    test_case "All boolean operators" `Slow test_interp_bool_ops ;
   ]
 
 
