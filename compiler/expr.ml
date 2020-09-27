@@ -39,6 +39,7 @@ type expr =
   | Id of string
   | UnOp of unOp * expr
   | BinOp of binOp * expr * expr
+  | LazyBinOp of binOp * expr * expr
   | Let of string * expr * expr
   | If of expr * expr * expr
 
@@ -71,5 +72,6 @@ let rec pp_expr fmt = function
   | Id x -> string fmt x
   | UnOp (op, e) -> pf fmt "(%a %a)" pp_unop op pp_expr e
   | BinOp (op, x1, x2) -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
+  | LazyBinOp (op, x1, x2) -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
   | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
   | If (c, t, f) -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f

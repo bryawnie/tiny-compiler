@@ -93,7 +93,6 @@ let interp_tests =
       (interp (BinOp (Or, Bool false, Bool false)))
   in
 
-
   let test_interp_bool_ops () = 
     check value "and"
       (BoolV true)
@@ -106,6 +105,25 @@ let interp_tests =
      (interp (BinOp (And, Bool true, BinOp (Or, Bool false, UnOp (Not, Bool true)))))
   in
 
+  let test_interp_bool_semantics () =
+    (* or *)
+    check value "(Or) Second expr should not execute"
+      (BoolV true)
+      (interp (BinOp (Or, Bool true, UnOp(Not, Num 1L)))) ;
+    check_raises "(Or) Raises error"
+      (Failure (Fmt.failwith "Error: Non boolean expr in Not sentence"))
+      (fun () ->
+        ignore @@ (interp (BinOp (Or, Bool false, UnOp (Not, Num 1L))))) ;
+    (* and *)
+    check value "(And) Second expr does not execute" 
+      (BoolV false)
+      (interp (BinOp (And, Bool false, UnOp (Not, Num 1L)))) ;
+    check_raises "(And) Raises error"
+      (Failure (Fmt.failwith "Error: Non boolean expr in Not sentence"))
+      (fun () ->
+        ignore @@ (interp (BinOp (And, Bool true, UnOp (Not, Num 1L)))))
+  in
+
   "interp", [
     (* Use the `Slow parameter for tests that only need to be run with the full test suite
       The tests here only concern the interpreter, so we tag them as slow.
@@ -116,6 +134,7 @@ let interp_tests =
     test_case "Boolean disyunction" `Slow test_interp_or ;
     test_case "Boolean conjunction" `Slow test_interp_and ;
     test_case "All boolean operators" `Slow test_interp_bool_ops ;
+    test_case "and/or lazy semantics" `Slow test_interp_bool_semantics ;
   ]
 
 
