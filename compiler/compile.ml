@@ -16,12 +16,6 @@ let gensym_if  =
     (Format.sprintf "if_false_%d" !counter, Format.sprintf "done_%d" !counter) )
 
 let rec compile_expr (e : expr) (env: env) : instruction list =
-(*(* pattern for binary operations (Add, Mul, etc...) *)
-  let compile_binop (op: arg * arg -> instruction)
-    (env: env) (e1:expr) (e2:expr) : instruction list =
-    compile_expr e1 env @ [IMov (Reg RAX, Reg RBX)] @
-    compile_expr e2 env @ [op (Reg RBX, Reg RAX)]
-  in *)
   match e with 
   | Num n -> [ IMov (Reg RAX, encode_int n) ]
   | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
@@ -29,11 +23,12 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     begin match op with
       | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
       | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
-      | Not -> compile_expr e env @ [INeg (Reg RAX)]
+      | Not -> compile_expr e env @
+        (* bool_bit is a 64-bit operand, so it must be moved into a
+          register before use *)
+        [IMov (Reg RBX, Const bool_bit) ; IAdd (Reg RAX, Reg RBX)]
     end
-  | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
-(*   | And (p, q) -> compile_binop (function a, b -> IAnd(a,b)) env p q
-  | Or (p, q) -> compile_binop (function a, b -> IOr(a,b)) env p q *)
+  | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env)) ]
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -53,7 +48,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))]
           @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)]
           @ [ISal (Reg RAX, Const 1L)]
-        | And -> [IAnd (Reg RAX, RegOffset (RSP, slot))]
+        | And ->
+          [IAnd (Reg RAX, RegOffset (RSP, slot)) ;
+          ]
         | Or -> [IOr (Reg RAX, RegOffset (RSP, slot))]
       in
       compiled_right @ save_right @ compiled_left @ apply_op

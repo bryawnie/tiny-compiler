@@ -40,13 +40,20 @@ let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
     | _ -> Fmt.failwith "TypeError: expected boolean values but got %a and %a"
             pp_value e1 pp_value e2
 
+let unpackBoolV : value -> bool =
+  function
+  | BoolV p -> p
+  | _ -> Fmt.failwith "TypeError: not a boolean"
+
+
+open Expr
+
 let liftIf : value -> value -> value -> value =
   fun c tb fb ->
     match c with
     | BoolV cond -> if cond then tb else fb
     | _ -> Fmt.failwith "Error: Non boolean condition in If sentence"
 
-open Expr
 
 (** Interpreter Environment **)
 type env = (string * value) list
@@ -79,7 +86,13 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
       | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
       | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
-      | Or -> liftBoolV (||) (interp ~env:env l) (interp ~env:env r)
-      | And -> liftBoolV (&&) (interp ~env:env l) (interp ~env:env r)
+      (* Or/And use "lazy" evaluation *)
+      | Or ->
+        let vl = lazy (unpackBoolV @@ interp ~env:env l) in
+        let vr = lazy (unpackBoolV @@ interp ~env:env r) in
+        if Lazy.force vl then BoolV true
+        else BoolV (Lazy.force vr)
+      | And ->
+        BoolV (unpackBoolV (interp ~env:env l) && unpackBoolV (interp ~env:env r))
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
