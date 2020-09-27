@@ -1,0 +1,4 @@
+NAME: Evaluation shortcut for 'and' operator
+DESCRIPTION: Checks that the second expression is not evaluated
+SRC: (and false (not 9812347978124786))
+EXPECTED: false

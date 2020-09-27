@@ -28,12 +28,6 @@ let gensym_eq  =
     Format.sprintf "eq_%d" !counter )
 
 let rec compile_expr (e : expr) (env: env) : instruction list =
-(*(* pattern for binary operations (Add, Mul, etc...) *)
-  let compile_binop (op: arg * arg -> instruction)
-    (env: env) (e1:expr) (e2:expr) : instruction list =
-    compile_expr e1 env @ [IMov (Reg RAX, Reg RBX)] @
-    compile_expr e2 env @ [op (Reg RBX, Reg RAX)]
-  in *)
   match e with 
   | Num n -> [ IMov (Reg RAX, encode_int n) ]
   | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
@@ -41,9 +35,12 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     begin match op with
       | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
       | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
-      | Not -> compile_expr e env @ [INeg (Reg RAX)]
+      | Not -> compile_expr e env @
+        (* bool_bit is a 64-bit operand, so it must be moved into a
+          register before use *)
+        [IMov (Reg RBX, Const bool_bit) ; IAdd (Reg RAX, Reg RBX)]
     end
-  | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env))]
+  | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env)) ]
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -63,8 +60,6 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))]
           @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)]
           @ [ISal (Reg RAX, Const 1L)]
-        | And -> [IAnd (Reg RAX, RegOffset (RSP, slot))]
-        | Or  -> [IOr (Reg RAX, RegOffset (RSP, slot))]
         | Less -> 
           let less_lbl = gensym_less () in
           [ ICmp (Reg RAX, RegOffset (RSP, slot));
@@ -81,8 +76,26 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
             IMov (Reg RAX, Const false_encoding);
             ILabel eq_lbl
           ]
+        | _ -> Fmt.failwith "unrecognized binary operator: %a" pp_binop op
       in
       compiled_right @ save_right @ compiled_left @ apply_op
+  | LazyBinOp (op, l, r) ->
+    let compare, end_block =
+    begin
+      match op with
+      | And -> [IMov (Reg RBX, Const false_encoding); ICmp (Reg RAX, Reg RBX)],
+        [IMov (Reg RAX, Const true_encoding)]
+      | Or -> [IMov (Reg RBX, Const true_encoding); ICmp (Reg RAX, Reg RBX)],
+       [IMov (Reg RAX, Const false_encoding)]
+      | _ -> Fmt.failwith "unrecognized lazy binary operator: %a" pp_binop op
+    end in
+    let label = gensym "L" in
+    let jmp = [ IJe label ] in
+    let end_label = [ ILabel label ] in
+    let compiled_left =  compile_expr l env in
+    let compiled_right = compile_expr r env in
+    compiled_left @ compare @ jmp @ compiled_right @ compare @ jmp @ end_block @ end_label
+
   | If (c, t, f) -> 
     let (else_label, done_label) = gensym_if () in
     (compile_expr c env) @

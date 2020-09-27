@@ -1,0 +1,4 @@
+NAME: Evaluation shortcut for 'or' operator
+DESCRIPTION: Checks that second expression is not evaluated
+SRC: (or true (not 97812674761234))
+EXPECTED: true

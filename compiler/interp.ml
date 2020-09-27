@@ -40,6 +40,14 @@ let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
     | _ -> Fmt.failwith "TypeError: expected boolean values but got %a and %a"
             pp_value e1 pp_value e2
 
+let unpackBoolV : value -> bool =
+  function
+  | BoolV p -> p
+  | _ -> Fmt.failwith "TypeError: not a boolean"
+
+
+open Expr
+
 let liftIf : value -> value -> value -> value =
   fun c tb fb ->
     match c with
@@ -98,3 +106,5 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
       | Eq  -> liftEqV (interp ~env:env l) (interp ~env:env r)
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
+  | LazyBinOp (op, l, r) ->
+    Fmt.failwith "unkown operator: %a" pp_binop op

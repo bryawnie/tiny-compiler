@@ -6,9 +6,9 @@ typedef uint64_t val;
 
 extern val our_code_starts_here() asm("our_code_starts_here");
 
-const val BOOL_BITMASK = 1;
-const val BOOL_TRUE = -1;
-const val BOOL_FALSE = 1;
+const val BOOL_BITMASK = 0x0000000000000001;
+const val BOOL_TRUE = 0x8000000000000001;
+const val BOOL_FALSE = 0x0000000000000001;
 
 void print_value(val v) {
   if (!(v & BOOL_BITMASK)) { // integer
