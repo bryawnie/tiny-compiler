@@ -98,8 +98,8 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
       | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
       | Less -> liftCompV (<) (interp ~env:env l) (interp ~env:env r)
-      | Eq  -> liftEqV (interp ~env:env l) (interp ~env:env r)
-      | Or  -> liftBoolV (||) (interp ~env:env l) (interp ~env:env r)
-      | And -> liftBoolV (&&) (interp ~env:env l) (interp ~env:env r)
+      | Eq -> liftEqV (interp ~env:env l) (interp ~env:env r)
+      | Or -> BoolV (unpackBoolV (interp ~env:env l) || unpackBoolV (interp ~env:env r))
+      | And -> BoolV (unpackBoolV (interp ~env:env l) && unpackBoolV (interp ~env:env r))
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
