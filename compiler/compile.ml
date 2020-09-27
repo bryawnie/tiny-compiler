@@ -48,12 +48,26 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))]
           @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)]
           @ [ISal (Reg RAX, Const 1L)]
-        | And ->
-          [IAnd (Reg RAX, RegOffset (RSP, slot)) ;
-          ]
-        | Or -> [IOr (Reg RAX, RegOffset (RSP, slot))]
+        | _ -> Fmt.failwith "unrecognized binary operator: %a" pp_binop op
       in
       compiled_right @ save_right @ compiled_left @ apply_op
+  | LazyBinOp (op, l, r) ->
+    let compare, end_block =
+    begin
+      match op with
+      | And -> [IMov (Reg RBX, Const false_encoding); ICmp (Reg RAX, Reg RBX)],
+        [IMov (Reg RAX, Const true_encoding)]
+      | Or -> [IMov (Reg RBX, Const true_encoding); ICmp (Reg RAX, Reg RBX)],
+       [IMov (Reg RAX, Const false_encoding)]
+      | _ -> Fmt.failwith "unrecognized lazy binary operator: %a" pp_binop op
+    end in
+    let label = gensym "L" in
+    let jmp = [ IJe label ] in
+    let end_label = [ ILabel label ] in
+    let compiled_left =  compile_expr l env in
+    let compiled_right = compile_expr r env in
+    compiled_left @ compare @ jmp @ compiled_right @ compare @ jmp @ end_block @ end_label
+
   | If (c, t, f) -> 
     let (else_label, done_label) = gensym_if () in
     (compile_expr c env) @
