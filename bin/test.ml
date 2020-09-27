@@ -109,7 +109,7 @@ let interp_tests =
     (* or *)
     check value "(Or) Second expr should not execute"
       (BoolV true)
-      (interp (BinOp (Or, Bool true, UnOp(Not, Num 1L)))) ;
+      (interp (BinOp (Or, Bool true, UnOp (Not, Num 1L)))) ;
     check_raises "(Or) Raises error"
       (Failure (Fmt.failwith "Error: Non boolean expr in Not sentence"))
       (fun () ->

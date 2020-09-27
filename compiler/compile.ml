@@ -27,10 +27,27 @@ let gensym_eq  =
     counter := !counter + 1;
     Format.sprintf "eq_%d" !counter )
 
+(* Compiles instructions common to binary operators *)
+let compile_binop_preamble (l: expr) (r: expr) (env: env)
+  (compiler: expr -> env -> instruction list) : instruction list =
+  let compiled_right = compiler r env in
+  let new_env, slot = extend_env (gensym "tmp") env in
+  let compiled_left = compiler l new_env in
+  compiled_right @ [ IMov (RegOffset (RSP, slot), Reg RAX) ] @ compiled_left
+  @ [ IMov (Reg RBX, RegOffset (RSP, slot)) ]
+
+(* Compiles and/or operators *)
+let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
+  (compiler: expr -> env -> instruction list) : instruction list =
+  let compare = [IMov (Reg RBX, Const (encode_bool skip_on)) ;
+    ICmp (Reg RAX, Reg RBX) ; IJe lbl] in
+  compiler l env @ compare @ compiler r env @ compare
+  @ [IMov (Reg RAX, Const (encode_bool (not skip_on))) ; ILabel lbl]
+
 let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
-  | Num n -> [ IMov (Reg RAX, encode_int n) ]
-  | Bool p -> [ IMov (Reg RAX, encode_bool p) ]
+  | Num n -> [ IMov (Reg RAX, Const (encode_int n)) ]
+  | Bool p -> [ IMov (Reg RAX, Const (encode_bool p)) ]
   | UnOp (op, e) ->
     begin match op with
       | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
@@ -46,56 +63,37 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       let compiled_val = compile_expr v env in
       let save_val     = [ IMov(RegOffset (RSP, slot), Reg RAX) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
-  | BinOp (op,l,r) -> 
-      let compiled_right = compile_expr r env in
-      let (new_env,slot) = extend_env (gensym "tmp") env in
-      let save_right     = [ IMov(RegOffset (RSP, slot), Reg RAX) ] in
-      let compiled_left  = compile_expr l new_env in
-      let apply_op  =
-        match op with
-        | Add -> [IAdd (Reg RAX, RegOffset (RSP, slot))]
-        | Sub -> [ISub (Reg RAX, RegOffset (RSP, slot))]
-        | Mul -> [IMul (Reg RAX, RegOffset (RSP, slot))]
-          @ [ISar (Reg RAX, Const 1L)]
-        | Div -> [IMov (Reg RBX, RegOffset (RSP, slot))]
-          @ [IMov (Reg RDX, Const 0L)] @ [IDiv (Reg RBX)]
-          @ [ISal (Reg RAX, Const 1L)]
-        | Less -> 
-          let less_lbl = gensym_less () in
-          [ ICmp (Reg RAX, RegOffset (RSP, slot));
-            IMov (Reg RAX, Const true_encoding);
-            IJl  less_lbl;
-            IMov (Reg RAX, Const false_encoding);
-            ILabel less_lbl
-          ]
-        | Eq -> 
-          let eq_lbl = gensym_eq () in
-          [ ICmp (Reg RAX, RegOffset (RSP, slot));
-            IMov (Reg RAX, Const true_encoding);
-            IJe  eq_lbl;
-            IMov (Reg RAX, Const false_encoding);
-            ILabel eq_lbl
-          ]
-        | _ -> Fmt.failwith "unrecognized binary operator: %a" pp_binop op
-      in
-      compiled_right @ save_right @ compiled_left @ apply_op
-  | LazyBinOp (op, l, r) ->
-    let compare, end_block =
+  | BinOp (op,l,r) ->
     begin
       match op with
-      | And -> [IMov (Reg RBX, Const false_encoding); ICmp (Reg RAX, Reg RBX)],
-        [IMov (Reg RAX, Const true_encoding)]
-      | Or -> [IMov (Reg RBX, Const true_encoding); ICmp (Reg RAX, Reg RBX)],
-       [IMov (Reg RAX, Const false_encoding)]
-      | _ -> Fmt.failwith "unrecognized lazy binary operator: %a" pp_binop op
-    end in
-    let label = gensym "L" in
-    let jmp = [ IJe label ] in
-    let end_label = [ ILabel label ] in
-    let compiled_left =  compile_expr l env in
-    let compiled_right = compile_expr r env in
-    compiled_left @ compare @ jmp @ compiled_right @ compare @ jmp @ end_block @ end_label
-
+      | Add -> compile_binop_preamble l r env compile_expr 
+        @ [IAdd (Reg RAX, Reg RBX)]
+      | Sub -> compile_binop_preamble l r env compile_expr
+        @ [ISub (Reg RAX, Reg RBX)]
+      | Mul -> compile_binop_preamble l r env compile_expr
+        @ [IMul (Reg RAX, Reg RBX) ; ISar (Reg RAX, Const 1L)]
+      | Div -> compile_binop_preamble l r env compile_expr
+        @ [IMov (Reg RDX, Const 0L) ; IDiv (Reg RBX) ; ISal (Reg RAX, Const 1L)]
+      | Less -> 
+        let less_lbl = gensym_less () in
+        compile_binop_preamble l r env compile_expr @
+        [ ICmp (Reg RAX, Reg RBX) ;
+          IMov (Reg RAX, Const true_encoding) ;
+          IJl less_lbl ;
+          IMov (Reg RAX, Const false_encoding) ;
+          ILabel less_lbl ]
+      | Eq ->
+        let eq_lbl =  gensym_less () in
+        compile_binop_preamble l r env compile_expr @
+        [ ICmp (Reg RAX, Reg RBX) ;
+          IMov (Reg RAX, Const true_encoding) ;
+          IJe eq_lbl ;
+          IMov (Reg RAX, Const false_encoding) ;
+          ILabel eq_lbl]
+      (* And & Or have shortucut semantics *)
+      | And -> compile_shortcut_binop l r env (gensym "and") false compile_expr
+      | Or -> compile_shortcut_binop l r env (gensym "or") true compile_expr
+    end
   | If (c, t, f) -> 
     let (else_label, done_label) = gensym_if () in
     (compile_expr c env) @
