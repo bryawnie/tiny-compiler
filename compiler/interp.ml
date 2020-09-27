@@ -86,7 +86,7 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
       | Sub -> liftNumV (Int64.sub) (interp l ~env:env) (interp r ~env:env)
       | Mul -> liftNumV (Int64.mul) (interp l ~env:env) (interp r ~env:env)
       | Div -> liftNumV (Int64.div) (interp l ~env:env) (interp r ~env:env)
-      (* Or/And use "lazy" evaluation *)
+      (* Or/And should use "lazy" evaluation *)
       | Or ->
         let vl = lazy (unpackBoolV @@ interp ~env:env l) in
         let vr = lazy (unpackBoolV @@ interp ~env:env r) in
@@ -96,3 +96,5 @@ let rec interp ?(env=empty_env) (e : expr)  : value =
         BoolV (unpackBoolV (interp ~env:env l) && unpackBoolV (interp ~env:env r))
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
+  | LazyBinOp (op, l, r) ->
+    Fmt.failwith "unkown operator: %a" pp_binop op
