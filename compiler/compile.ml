@@ -32,7 +32,8 @@ let gensym  =
       Format.sprintf "%s_%d" basename !counter))
 
 
-(* Compiles instructions common to binary operators *)
+(* Compiles instructions common to binary operators. Moves left argument
+into RAX (return_register), and the right one into R11 (argument_register).*)
 let compile_binop_preamble (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =
   let compiled_right = compiler r env in
@@ -90,8 +91,8 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | Sub1 -> compile_expr e env @ [ISub (return_register, Const 2L)]
       | Not -> compile_expr e env @ [IMov (argument_register, Const bool_bit) ;
         IXor (return_register, argument_register)]
-        (* bool_bit is a 64-bit operand, so it must be moved into a
-          register before use *)
+        (* bool_bit is a 64-bit value, so it must be moved into a register
+        before use as an operand *)
     end
   | Id x  -> [ IMov (return_register, RegOffset (RSP, lookup x env)) ]
   | Let (id,v,b) -> 
