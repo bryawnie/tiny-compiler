@@ -121,7 +121,13 @@ let interp_tests =
       (interp (UnOp (Not, Bool true))) ;
     check value "not false = true"
       (BoolV true)
-      (interp (UnOp (Not, Bool false)))
+      (interp (UnOp (Not, Bool false))) ;
+    check value "(Not (Not (Not false))) = false " 
+      (BoolV false)
+      (interp (UnOp (Not, UnOp (Not , UnOp (Not ,(Bool true))))));
+    check value "If-Not true 5 else 6"
+      (NumV 6L)
+      (interp (If ((UnOp (Not, (Bool true))), (Num 5L), (Num 6L))));      
   in
 
   let test_interp_and () =
@@ -157,10 +163,10 @@ let interp_tests =
   let test_interp_bool_ops () = 
     check value "and"
       (BoolV true)
-      (interp (BinOp (And, Bool true, Bool true))) ;
+      (interp (BinOp (And, Bool true, (BinOp (Or, Bool true, Bool false))))) ;
     check value "or" 
       (BoolV false)
-      (interp (BinOp (Or, Bool false, Bool false))) ;
+      (interp (BinOp (Or, (BinOp (And, Bool true, Bool false)), Bool false))) ;
     check value "compound expression"
      (BoolV false)
      (interp (BinOp (And, Bool true, BinOp (Or, Bool false, UnOp (Not, Bool true)))))
