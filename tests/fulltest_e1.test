@@ -1,0 +1,13 @@
+NAME: Testing Everything Entrega 1
+DESCRIPTION: Testing Everything
+SRC:
+(let (x 5)
+    (let (y (add1 (sub1 x)))
+        (let (x (if (< y 5) (* x 8) (* x 12)))
+            (if (and (= x 60) (and (= y 5) (not false)))
+                (let (z (sub1 (/ x 4)))
+                    (/ (* -4 (- z 19)) 2))
+                false))))
+            
+EXPECTED:
+10
