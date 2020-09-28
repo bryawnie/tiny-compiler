@@ -21,17 +21,78 @@ let parse_tests =
       (UnOp (Add1, UnOp (Sub1, (Num 3L))))
   in
 
+  let test_parse_expressions () =
+    check expr "Same expr"
+      (parse (sexp_from_string "true"))
+      (Bool true) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "false"))
+      (Bool false) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "x"))
+      (Id "x") ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(add1 5)"))
+      (UnOp (Add1, Num 5L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(sub1 3)"))
+      (UnOp (Sub1, Num 3L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(not false)"))
+      (UnOp (Not, Bool false)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(+ 3 4)"))
+      (BinOp (Add, Num 3L, Num 4L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(- 7 6)"))
+      (BinOp (Sub, Num 7L, Num 6L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(* 2 5)"))
+      (BinOp (Mul, Num 2L, Num 5L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(/ 12 6)"))
+      (BinOp (Div, Num 12L, Num 6L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(and true false)"))
+      (BinOp (And, Bool true, Bool false)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(or true false)"))
+      (BinOp (Or, Bool true, Bool false)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(< 8 7)"))
+      (BinOp (Less, Num 8L, Num 7L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(= 1 1)"))
+      (BinOp (Eq, Num 1L, Num 1L)) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(let (x 5) x)"))
+      (Let ("x", Num 5L, Id "x")) ;
+    check expr "Same expr"
+      (parse (sexp_from_string "(if true 5 6)"))
+      (If (Bool true, Num 5L, Num 6L)) ;
+  in
+
   (* An example of a test catching an error *)
   let test_parse_error () =
     let sexp = `List [`Atom "foo"; `Atom "bar"] in
     check_raises "Should raise failwith" 
       (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp sexp))
-      (fun () -> ignore @@ parse sexp)
+      (fun () -> ignore @@ parse sexp) ;
+    check_raises "Should fail"
+      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(true)")))
+      (fun () -> ignore @@ parse (sexp_from_string "(if (true) 5 6)")) ;
+    check_raises "Should fail"
+      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(+ 4 5 6)")))
+      (fun () -> ignore @@ parse (sexp_from_string "(+ 4 5 6)")) ;
+    check_raises "Should fail"
+      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(4 * 8)")))
+      (fun () -> ignore @@ parse (sexp_from_string "(4 * 8)")) ;
   in
 
   "parse", [
     test_case "A number" `Quick test_parse_int ;
     test_case "A compound expression" `Quick test_parse_compound ;
+    test_case "All expressions" `Quick test_parse_expressions;
     test_case "An invalid s-expression" `Quick test_parse_error
   ]
 
