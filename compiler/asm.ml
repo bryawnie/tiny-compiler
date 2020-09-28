@@ -4,6 +4,7 @@ type reg =
 | RBX
 | RDX
 | RSP
+| R11
 
 
 (* arguments for instructions *)
@@ -19,8 +20,8 @@ type instruction =
 | IAdd of arg * arg   (* Adition *)
 | ISub of arg * arg   (* Substraction *)
 | IOr  of arg * arg   (* Bitwise logical or *)
-| IAnd of arg * arg   (* Bitwase logical and *)
-| INeg of arg         (* Arithmetic/2's complement negation *)
+| IAnd of arg * arg   (* Bitwise logical and *)
+| IXor of arg * arg   (* Bitwise exclusive or *)
 | IMul of arg * arg   (* Arithmetic Product*)
 | IDiv of arg         (* Divides RDX RAX / arg *)
 | ISar of arg * arg   (* Arithmetic Right Shift *)
@@ -41,6 +42,7 @@ let pp_reg : reg Fmt.t =
     | RBX -> Fmt.string fmt "RBX"
     | RDX -> Fmt.string fmt "RDX"
     | RSP -> Fmt.string fmt "RSP"
+    | R11 -> Fmt.string fmt "R11"
 
 
 (* A pretty printing for args *)
@@ -71,7 +73,7 @@ let pp_instr : instruction Fmt.t =
   | IRet          -> Fmt.pf fmt "   ret" 
   | IOr (a1, a2)  -> Fmt.pf fmt "   or   %a, %a" pp_arg a1 pp_arg a2
   | IAnd (a1, a2) -> Fmt.pf fmt "   and  %a, %a" pp_arg a1 pp_arg a2
-  | INeg a        -> Fmt.pf fmt "   neg  %a" pp_arg a
+  | IXor (a1, a2) -> Fmt.pf fmt "   xor  %a, %a" pp_arg a1 pp_arg a2
 
 
 (* A pretty printing for instruction list *)

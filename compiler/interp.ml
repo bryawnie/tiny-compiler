@@ -13,6 +13,8 @@ let pp_value : value Fmt.t =
     | NumV n -> Fmt.int64 fmt n
     | BoolV p -> Fmt.bool fmt p
 
+(** Value lifters **)
+
 (* Lifting functions on int to values *)
 let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
   fun op e1 e2 ->
@@ -28,7 +30,7 @@ let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
     | _ -> Fmt.failwith "TypeError: expected boolean values but got %a and %a"
             pp_value e1 pp_value e2
 
-(* Extacts the boolean value of BoolV *)
+(* Extracts the boolean value of a BoolV *)
 let unpackBoolV : value -> bool =
   function
   | BoolV p -> p
