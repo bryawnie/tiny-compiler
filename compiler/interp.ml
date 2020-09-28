@@ -6,25 +6,12 @@ type value =
 
 (** Pretty printing **)
 
-(* printing values and expressions *)
+(* printing values *)
 let pp_value : value Fmt.t =
   fun fmt e -> 
     match e with 
     | NumV n -> Fmt.int64 fmt n
     | BoolV p -> Fmt.bool fmt p
-(* 
-(* Lifting functions on int to values *)
-let liftNumV ( op : int64 -> int64) : value -> value =
-  function
-  | NumV n -> NumV (op n)
-  | x -> Fmt.failwith "(liftNumV) type error: expected int64, got: %a" pp_value x
-
-(* Lift boolean functions to values*)
-let liftBoolV (op: bool -> bool) : value -> value =
-  function
-  | BoolV p -> BoolV (op p)
-  | q -> Fmt.failwith "(liftBoolV) type error: expected bool, got: %a" pp_value q
- *)
 
 (* Lifting functions on int to values *)
 let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
@@ -33,6 +20,7 @@ let liftNumV : (int64 -> int64 -> int64) -> value -> value -> value =
     | NumV n1, NumV n2 -> NumV (op n1 n2)
     | _ -> Fmt.failwith "Error: Numeric binop applied to non numeric values"
 
+(* Lifting functions on bool to values *)
 let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
@@ -40,23 +28,27 @@ let liftBoolV : (bool -> bool -> bool) -> value -> value -> value =
     | _ -> Fmt.failwith "TypeError: expected boolean values but got %a and %a"
             pp_value e1 pp_value e2
 
+(* Extacts the boolean value of BoolV *)
 let unpackBoolV : value -> bool =
   function
   | BoolV p -> p
   | _ -> Fmt.failwith "TypeError: not a boolean"
 
+(* Handles if expressions *)
 let liftIf : value -> value -> value -> value =
   fun c tb fb ->
     match c with
     | BoolV cond -> if cond then tb else fb
     | _ -> Fmt.failwith "Error: Non boolean condition in If sentence"
 
+(* Handles the comparations of inequality between integers *)
 let liftCompV : (int64 -> int64 -> bool) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
     | NumV n1, NumV n2 -> BoolV (op n1 n2)
     | _ -> Fmt.failwith "Error: Numeric comparer applied to non numeric values"
 
+(* Handles the comparations of equality between booleans or integers *)
 let liftEqV : value -> value -> value =
   fun e1 e2 ->
     match e1, e2 with

@@ -41,7 +41,7 @@ let rec parse (sexp : sexp) : expr =
   | `Atom s ->
     begin match Int64.of_string_opt s with
       | Some n -> Num n
-      | None -> Id s (*Fmt.failwith "Not a known atom: %s" s*)
+      | None -> Id s 
     end
   | `List [`Atom "add1" ; e ] -> UnOp (Add1, parse e) 
   | `List [`Atom "sub1" ; e ] -> UnOp (Sub1, parse e)
