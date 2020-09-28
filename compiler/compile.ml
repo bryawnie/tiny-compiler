@@ -3,6 +3,13 @@ open Asm
 open Env
 open Encode
 
+(** Register usage conventions **)
+(*  RAX = return value | first argument to a instruction
+    R11 = second argument to a instruction *)
+let return_register = Reg RAX
+let argument_register = Reg R11
+
+
 (* 
   A gensym for standard symbols and specific instructions
   (Hope it provides a better understanding of generated asm) 
@@ -31,28 +38,28 @@ let compile_binop_preamble (l: expr) (r: expr) (env: env)
   let compiled_right = compiler r env in
   let new_env, slot = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RSP, slot), Reg RAX) ] @ compiled_left
-  @ [ IMov (Reg RBX, RegOffset (RSP, slot)) ]
+  compiled_right @ [ IMov (RegOffset (RSP, slot), return_register) ] @ compiled_left
+  @ [ IMov (argument_register, RegOffset (RSP, slot)) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
   (compiler: expr -> env -> instruction list) : instruction list =
   let compare = [
-    IMov (Reg RBX, Const (encode_bool skip_on)) ;
-    ICmp (Reg RAX, Reg RBX) ; 
+    IMov (argument_register, Const (encode_bool skip_on)) ;
+    ICmp (return_register, argument_register) ; 
     IJe lbl
   ] in
   compiler l env @ compare @ compiler r env @ compare
-  @ [IMov (Reg RAX, Const (encode_bool (not skip_on))) ; ILabel lbl]
+  @ [IMov (return_register, Const (encode_bool (not skip_on))) ; ILabel lbl]
 
 (* Compiles < and = comparators *)
 let compile_binop_comparator (cmp_label: string) (inst: instruction) : instruction list =
   let preamble  =  [
-    ICmp (Reg RAX, Reg RBX) ; 
-    IMov (Reg RAX, Const true_encoding) 
+    ICmp (return_register, argument_register) ; 
+    IMov (return_register, Const true_encoding) 
   ] in 
   let ending    =  [
-    IMov (Reg RAX, Const false_encoding) ; 
+    IMov (return_register, Const false_encoding) ; 
     ILabel cmp_label 
   ] in 
   preamble @ [inst] @ ending
@@ -62,7 +69,7 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   let false_lbl = gensym "if" in
   let done_lbl  = gensym "done" in 
   let preamble  = [
-    ICmp (Reg RAX, Const false_encoding);
+    ICmp (return_register, Const false_encoding);
     IJe  (false_lbl)
   ] in
   preamble
@@ -75,33 +82,34 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
-  | Num n -> [ IMov (Reg RAX, Const (encode_int n)) ]
-  | Bool p -> [ IMov (Reg RAX, Const (encode_bool p)) ]
+  | Num n -> [ IMov (return_register, Const (encode_int n)) ]
+  | Bool p -> [ IMov (return_register, Const (encode_bool p)) ]
   | UnOp (op, e) ->
     begin match op with
-      | Add1 -> compile_expr e env @ [IAdd (Reg RAX, Const 2L)]
-      | Sub1 -> compile_expr e env @ [ISub (Reg RAX, Const 2L)]
-      | Not -> compile_expr e env @ [IMov (Reg RBX, Const bool_bit) ; IAdd (Reg RAX, Reg RBX)]
+      | Add1 -> compile_expr e env @ [IAdd (return_register, Const 2L)]
+      | Sub1 -> compile_expr e env @ [ISub (return_register, Const 2L)]
+      | Not -> compile_expr e env @ [IMov (argument_register, Const bool_bit) ;
+        IXor (return_register, argument_register)]
         (* bool_bit is a 64-bit operand, so it must be moved into a
           register before use *)
     end
-  | Id x  -> [ IMov (Reg RAX, RegOffset (RSP, lookup x env)) ]
+  | Id x  -> [ IMov (return_register, RegOffset (RSP, lookup x env)) ]
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(RegOffset (RSP, slot), Reg RAX) ] in
+      let save_val     = [ IMov(RegOffset (RSP, slot), return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op,l,r) ->
     begin
       match op with
       | Add -> compile_binop_preamble l r env compile_expr 
-        @ [IAdd (Reg RAX, Reg RBX)]
+        @ [IAdd (return_register, argument_register)]
       | Sub -> compile_binop_preamble l r env compile_expr
-        @ [ISub (Reg RAX, Reg RBX)]
+        @ [ISub (return_register, argument_register)]
       | Mul -> compile_binop_preamble l r env compile_expr
-        @ [IMul (Reg RAX, Reg RBX) ; ISar (Reg RAX, Const 1L)]
+        @ [IMul (return_register, argument_register) ; ISar (return_register, Const 1L)]
       | Div -> compile_binop_preamble l r env compile_expr
-        @ [IMov (Reg RDX, Const 0L) ; IDiv (Reg RBX) ; ISal (Reg RAX, Const 1L)]
+        @ [IMov (Reg RDX, Const 0L) ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
       | Less -> 
         let less_lbl = gensym "less" in
         compile_binop_preamble l r env compile_expr 
