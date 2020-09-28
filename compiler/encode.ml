@@ -1,5 +1,3 @@
-open Asm
-
 (* constants *)
 let true_encoding = 0x8000000000000001L
 let false_encoding = 0x0000000000000001L
