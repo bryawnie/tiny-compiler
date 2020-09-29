@@ -194,6 +194,76 @@ let interp_tests =
         ignore @@ (interp (BinOp (And, Bool true, UnOp (Not, Num 1L)))));
   in
 
+  let  test_interp_unop () =
+    check value "add1 5"
+      (interp (UnOp (Add1, Num 5L)))
+      (NumV 6L);
+    check value "sub1 5"
+      (interp (UnOp (Sub1, Num 5L)))
+      (NumV 4L);
+    check value "sub1 5"
+      (interp (UnOp (Sub1, (UnOp (Add1, Num 5L)))))
+      (NumV 5L);
+  in
+
+  let  test_interp_binop () =
+    check value "+ 5 6"
+      (interp (BinOp (Add, Num 5L, Num 6L)))
+      (NumV 11L);
+    check value "- 7 6"
+      (interp (BinOp (Sub, Num 7L, Num 6L)))
+      (NumV 1L);
+    check value "* 5 3"
+      (interp (BinOp (Mul, Num 5L, Num 3L)))
+      (NumV 15L);
+    check value "/ 18 6"
+      (interp (BinOp (Div, Num 18L, Num 6L)))
+      (NumV 3L);
+    check value "< 5 6"
+      (interp (BinOp (Less, Num 5L, Num 6L)))
+      (BoolV true);
+    check value "< 6 5"
+      (interp (BinOp (Less, Num 6L, Num 5L)))
+      (BoolV false);
+    check value "= 5 5"
+      (interp (BinOp (Eq, Num 5L, Num 5L)))
+      (BoolV true);
+    check value "= 5 6"
+      (interp (BinOp (Eq, Num 5L, Num 6L)))
+      (BoolV false);
+    check_raises "Minor num bool" 
+      (Failure (Fmt.strf "Error: Numeric comparator applied to non numeric values"))
+      (fun () -> ignore @@ interp  (BinOp (Less, Num 5L, Bool true)))
+  in
+
+  let  test_interp_if () =
+    check value "If true" 
+      (interp (If (Bool true, Num 5L, Num 6L)) )
+      (NumV 5L);
+    check value "If false" 
+      (interp (If (Bool false, Num 5L, Num 6L)) )
+      (NumV 6L);
+    check value "If true expr" 
+      (interp (If (Bool true, BinOp (Add, Num 5L, Num 4L), Num 6L)) )
+      (NumV 9L);
+    check_raises "Should fail" 
+      (Failure (Fmt.strf "Error: Non boolean condition in If sentence"))
+      (fun () -> ignore @@ interp (If (Num 5L, Num 6L, Num 7L)))
+  in
+
+  let  test_interp_let () = 
+    check value "let ( x 5 ) (+ x 6)" 
+      (interp (Let ("x", Num 5L, BinOp (Add, Id "x", Num 6L))))
+      (NumV 11L);
+    check value "let (x (not true)) x" 
+      (interp  (Let ("x", UnOp (Not, Bool true), Id "x")))
+      (BoolV false);
+    check value "let (x 5) (let (x (add1 x)) x)"
+      (interp (Let ("x", Num 5L, (Let ("x", UnOp (Add1, Id "x"), Id "x")))))
+      (NumV 6L);
+  in
+
+
   "interp", [
     (* Use the `Slow parameter for tests that only need to be run with the full test suite
       The tests here only concern the interpreter, so we tag them as slow.
@@ -205,6 +275,10 @@ let interp_tests =
     test_case "Boolean conjunction" `Slow test_interp_and ;
     test_case "All boolean operators" `Slow test_interp_bool_ops ;
     test_case "and/or lazy semantics" `Slow test_interp_bool_semantics ;
+    test_case "Integer UnOps" `Slow test_interp_unop;
+    test_case "Integer BinOps" `Slow test_interp_binop;
+    test_case "If sentences" `Slow test_interp_if;
+    test_case "Let-bindings" `Slow test_interp_let;
   ]
 
 

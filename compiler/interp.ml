@@ -48,7 +48,7 @@ let liftCompV : (int64 -> int64 -> bool) -> value -> value -> value =
   fun op e1 e2 ->
     match e1, e2 with
     | NumV n1, NumV n2 -> BoolV (op n1 n2)
-    | _ -> Fmt.failwith "Error: Numeric comparer applied to non numeric values"
+    | _ -> Fmt.failwith "Error: Numeric comparator applied to non numeric values"
 
 (* Handles the comparations of equality between booleans or integers *)
 let liftEqV : value -> value -> value =
