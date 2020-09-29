@@ -83,7 +83,6 @@ idiv    temp
 sal     RAX, 1
 ```
 
-__Operadores Binarios__
 ### Aritmética de Booleanos
 La sintaxis del operador `not` es `(not p)`, donde p es algún valor booleano. En assembler un not es un `XOR` entre el valor de `p` y `0b1000...0000`.
 
