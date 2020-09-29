@@ -9,9 +9,9 @@ Para la entrega 1, se implementan las siguientes especificaciones:
 - [x] [Valores Booleanos ( ``true``, ``false`` ).](#valores-booleanos)
 - [x] [Aritmética de Enteros ( ``+ - * /`` ).](#aritmética-de-enteros)
 - [x] [Aritmética de Booleanos ( ``and``, ``or``, ``not`` ).](#aritmética-de-booleanos)
-- [x] _Shortcut semantics_ para operadores ``and`` y ``or``.
-- [x] Comparadores ( ``<``, ``=`` ).
+- [x] [_Shortcut semantics_ para operadores ``and`` y ``or``.](#aritmética-de-booleanos)
 - [x] Condicionales (``if`` sentences).
+- [x] Comparadores ( ``<``, ``=`` ).
 
 El listado refleja tanto los objetivos básicos como los objetivos extra de esta entrega. A continuación se detalla la implementación de cada una de las especificaciones nombradas.
 
@@ -102,4 +102,58 @@ and_end:
 ```
 Esta implementación fue tomada de C, donde las operaciones `&&` y `||` poseen la misma semántica y compilan a algo similar (usando `gcc`).
 
-### Comparadores: <, =
+### Condicionales (``if`` sentences)
+Los condicionales presentan la siguiente sintaxis:
+```Scheme
+(if condition true)
+```
+A nivel implementación, la función que se encarga de manejar las sentencias ``if`` es ``compile_if``.
+
+La idea es partir comparando el booleano generado por la condición con la constante ``false``. Si son iguales, significa que la condición es falsa, y se hace un salto a un nuevo _label_. De no ser iguales, la condición es verdadera, por lo que se realiza el procedimiento de la rama _true_ y luego se salta al _label_ done (evitando ejecutar la rama falsa).
+```c
+    cmp     RAX, false
+    je      false_branch
+    # true instructions
+    jmp     done
+false_branch:
+    # false instructions
+done:
+    # the rest of the program
+```
+
+### Comparadores ( ``<``, ``=`` )
+Para expresar comparadores se utiliza la sintaxis:
+```
+(c expr1 expr2)
+```
+Donde ``c`` corresponde al comparador.
+
+Al igual que los demás [operadores binarios numéricos](#aritmética-de-enteros), comparten un proceso común, donde se compila el valor de ``expr2``, se guarda en un registro temporal y luego se opera con el resultado de ``expr1``, el cual está cargado en __RAX__.
+
+Sin embargo, tras lo anterior, la función ``compile_binop_operator`` se encarga de añadir el resto del trabajo. Primero, se realiza una comparación entre los registros __RAX__ y __tmp__ (expr1 y expr2), luego se asume que el resultado de dicha comparación es verdadero. Posteriormente, se hace un salto si la comparación en efecto era verdadera, sino, se fija __RAX__ como falso y se continua la ejecución. En concreto:
+```c
+    cmp     RAX, tmp
+    mov     RAX, true
+    je      equal           #jl     less
+    mov     RAX, false
+equal:                  #less:
+    # the rest of the program     
+```
+
+Los labels de los saltos son generados de tal forma que hay un contador distinto para ``=`` y ``<``.
+
+## Tests
+Se implementan tests al pipeline completo en archivos ``*.test``. Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
+
+Un ejemplo de test que utiliza todas las features implementadas en esta entrega se encuentra en ``fulltest_e1.test``, el cual prueba el funcionamiento del programa:
+
+```Scheme
+(let (x 5)
+    (let (y (add1 (sub1 x)))
+        (let (x (if (< y 5) (* x 8) (* x 12)))
+            (if (and (= x 60) (and (= y 5) (not false)))
+                (let (z (sub1 (/ x 4)))
+                    (/ (* -4 (- z 19)) 2))
+                false))))
+```
+Que entrega como resultado 10.
