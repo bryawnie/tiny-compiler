@@ -1,4 +1,4 @@
-# Mini-Compiler
+# Mini-Compiler :camel:
 __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
