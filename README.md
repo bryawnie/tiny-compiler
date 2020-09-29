@@ -1,18 +1,39 @@
-# ENTREGA 1
-CC5116 - Diseño e Implementación de Compiladores.
-Bryan Ortiz, Sergio Morales.
+# Mini-Compiler
+__[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
-## ¿Qué se implementó en esta entrega?
-- let-bindings
-- Aritmética de enteros: +, -, *, /
-- Valores booleanos
-- Aritmética de booleanos: and, or, not
-- "Shortcut semantics" para operadores and, or
-- Comparadores: <, =
+Sergio Morales & Bryan Ortiz.
 
-## Sobre la implementación
+## Entrega 1
+Para la entrega 1, se implementan las siguientes especificaciones:
+- [x] ``let``-bindings.
+- [x] Aritmética de enteros ( ``+ - * /`` ).
+- [x] Valores booleanos ( ``true``, ``false`` ).
+- [x] Aritmética de booleanos ( ``and``, ``or``, ``not`` ).
+- [x] _Shortcut semantics_ para operadores ``and`` y ``or``.
+- [x] Comparadores ( ``<``, ``=`` ).
+- [x] Condicionales (``if`` sentences).
 
-### let-bindings
+El listado refleja tanto los objetivos básicos como los objetivos extra de esta entrega. A continuación se detalla la implementación de cada una de las especificaciones nombradas.
+
+## Implementación
+
+### ``let`` - bindings
+La expresión ``let`` posee la siguiente sintaxis:
+```Scheme
+(let (id val) body)
+```
+En concreto, permite asignar el valor de la expresión ``val`` a una id, para luego operar con ella en el cuerpo (``body``) de la expresión misma. 
+
+Para la implementación de ``let``, primero se compila el valor de ``val``, quedando en el registro de retorno. Posteriormente, se guarda en el stack con un offset _i_ indicado por el ambiente del compilador:
+```
+mov [RSP - 8*i], RAX
+```
+Luego se asocia dicho valor a la ``id``, y se procede a compilar el ``body`` de la expresión con un ambiente extendido con el valor de la ``id``.
+
+De este modo, cuando se necesite obtener el valor de la variable, se busca en __RSP__, utilizando el índice _i_ al que está asociado en el ambiente:
+```
+mov RAX, [RSP - 8*i]
+```
 
 ### Valores booleanos
 Ahora el lenguaje soporta dos tipos de valores: enteros y booleanos. Puesto que ambos tipos de dato están representados con un entero de 64 bits, se ha separado el bit menos significativo para ser utilizado a modo de marcador; un entero tiene un 0, mientras que un booleano posee un 1.
