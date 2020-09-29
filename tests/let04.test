@@ -1,0 +1,7 @@
+NAME: let04
+DESCRIPTION: id out of bound
+STATUS: CT error
+SRC:
+(let (x y) x)
+EXPECTED:
+Failure("Identifier y not found in environment")
