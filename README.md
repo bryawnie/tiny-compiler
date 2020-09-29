@@ -10,8 +10,8 @@ Para la entrega 1, se implementan las siguientes especificaciones:
 - [x] [Aritmética de Enteros ( ``+ - * /`` ).](#aritmética-de-enteros)
 - [x] [Aritmética de Booleanos ( ``and``, ``or``, ``not`` ).](#aritmética-de-booleanos)
 - [x] [_Shortcut semantics_ para operadores ``and`` y ``or``.](#aritmética-de-booleanos)
-- [x] Condicionales (``if`` sentences).
-- [x] Comparadores ( ``<``, ``=`` ).
+- [x] [Condicionales (``if`` sentences).](#condicionales-if-sentences)
+- [x] [Comparadores ( ``<``, ``=`` ).](#comparadores----)
 
 El listado refleja tanto los objetivos básicos como los objetivos extra de esta entrega. A continuación se detalla la implementación de cada una de las especificaciones nombradas.
 
