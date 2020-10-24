@@ -1,0 +1,6 @@
+NAME: divNeg
+DESCRIPTION: divides a positive number by a negative number
+SRC:
+(/ 9 -3)
+EXPECTED:
+|INTERPRET

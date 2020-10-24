@@ -39,8 +39,8 @@ let compile_binop_preamble (l: expr) (r: expr) (env: env)
   let compiled_right = compiler r env in
   let new_env, slot = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RSP, slot), return_register) ] @ compiled_left
-  @ [ IMov (argument_register, RegOffset (RSP, slot)) ]
+  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ compiled_left
+  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -94,11 +94,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
     end
-  | Id x  -> [ IMov (return_register, RegOffset (RSP, lookup x env)) ]
+  | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(RegOffset (RSP, slot), return_register) ] in
+      let save_val     = [ IMov(RegOffset (RBP, slot), return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op,l,r) ->
     begin
@@ -110,7 +110,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | Mul -> compile_binop_preamble l r env compile_expr
         @ [IMul (return_register, argument_register) ; ISar (return_register, Const 1L)]
       | Div -> compile_binop_preamble l r env compile_expr
-        @ [IMov (Reg RDX, Const 0L) ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
+        @ [ICqo ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
       | Less -> 
         let less_lbl = gensym "less" in
         compile_binop_preamble l r env compile_expr 
@@ -133,8 +133,15 @@ let compile_prog : expr Fmt.t =
   let prelude ="
 section .text
 global our_code_starts_here
-our_code_starts_here:" in
-Fmt.pf fmt "%s@\n%a" prelude pp_instrs (instrs @ [ IRet ])
+our_code_starts_here:
+  push RBP
+  mov  RBP, RSP
+  sub  RSP, 80" in (* Momentáneo *)
+  let epilogue = "
+  mov  RSP, RBP
+  pop  RBP
+  ret" in
+Fmt.pf fmt "%s@\n%a%s" prelude pp_instrs instrs epilogue
 
 (* The Pipeline *)
 let compile_src = 

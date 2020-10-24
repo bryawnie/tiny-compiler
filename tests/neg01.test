@@ -1,0 +1,6 @@
+NAME: neg
+DESCRIPTION: a negative number
+SRC:
+-4
+EXPECTED:
+|INTERPRET

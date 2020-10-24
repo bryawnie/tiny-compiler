@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-typedef uint64_t val;
+typedef int64_t val;
 
 extern val our_code_starts_here() asm("our_code_starts_here");
 
