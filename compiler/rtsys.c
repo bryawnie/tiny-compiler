@@ -23,7 +23,7 @@ void print_value(val v) {
 }
 
 char * value_to_str(val v){
-  char * strOut = (char *) malloc(20*sizeof(char));
+  char * strOut = (char *) malloc(21*sizeof(char));
   if (!(v & BOOL_BITMASK)) { // integer
     sprintf(strOut, "%ld", v >> 1);
     return strOut;

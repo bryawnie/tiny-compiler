@@ -36,6 +36,17 @@ let gensym  =
     | _ -> (counter := !counter + 1;
       Format.sprintf "%s_%d" basename !counter))
 
+(* Type Checker for a register and a type expected *)
+let check_arg (register: arg) (type_error: arg) : instruction list =
+  [IMov (error_code_register, type_error)] @
+  [IMov (error_register, register)] @
+  [ITest (error_register, Const 1L)] @
+  if type_error == not_a_number then
+  [IJnz "error_handler"] else [IJz "error_handler"]
+  
+(* Shortcut typechecker for binary operations *)
+let check_binops (type_error: arg) =
+  check_arg return_register type_error @ check_arg argument_register type_error
 
 (* Compiles instructions common to binary operators. Moves left argument
 into RAX (return_register), and the right one into R11 (argument_register).*)
@@ -44,8 +55,8 @@ let compile_binop_preamble (l: expr) (r: expr) (env: env)
   let compiled_right = compiler r env in
   let new_env, slot = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ compiled_left
-  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
+  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ 
+  compiled_left  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -55,7 +66,8 @@ let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on
     ICmp (return_register, argument_register) ; 
     IJe lbl
   ] in
-  compiler l env @ compare @ compiler r env @ compare
+  compiler l env @ check_arg return_register not_a_boolean @ compare @ 
+  compiler r env @ check_arg return_register not_a_boolean @ compare
   @ [IMov (return_register, Const (encode_bool (not skip_on))) ; ILabel lbl]
 
 (* Compiles < and = comparators *)
@@ -84,15 +96,6 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
 
-let check_arg (register: arg) (type_error: arg) : instruction list =
-  [IMov (error_code_register, type_error)] @
-  [IMov (error_register, register)] @
-  [ITest (error_register, Const 1L)] @
-  if type_error == not_a_number then
-  [IJnz "error_handler"] else [IJz "error_handler"]
-  
-let check_binops (type_error: arg) =
-  check_arg return_register type_error @ check_arg argument_register type_error
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -134,7 +137,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         compile_binop_preamble l r env compile_expr 
         @ check_binops not_a_number (* Type Checking *)
         @ compile_binop_comparator less_lbl (IJl less_lbl)
-      | Eq ->
+      | Eq -> (* Doesn't need a type checking *)
         let eq_lbl =  gensym "eq" in
         compile_binop_preamble l r env compile_expr
         @ compile_binop_comparator eq_lbl (IJe eq_lbl)
@@ -142,7 +145,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | And -> compile_shortcut_binop l r env (gensym "and") false compile_expr
       | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
     end
-  | If (c, t, f) -> (compile_expr c env) @ compile_if compile_expr t f env
+  | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
 
 let error_handler =
  [ILabel "error_handler";
@@ -172,3 +175,14 @@ Fmt.pf fmt "%s@\n%a%s\n%a" prelude pp_instrs instrs epilogue pp_instrs error_han
 let compile_src = 
   let open Parse in
   Fmt.using (fun src -> parse (sexp_from_string src)) compile_prog
+
+(* let check_equal () =
+  let lbl = gensym "boolean_first_op" in
+  let done_lbl = gensym "done_type_checking" in
+  [ITest (return_register, Const 1L)] @
+  [IJnz lbl] @
+  check_arg argument_register not_a_number @
+  [IJmp done_lbl] @
+  [ILabel lbl] @
+  check_arg argument_register not_a_boolean @
+  [ILabel done_lbl] *)
