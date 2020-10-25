@@ -23,14 +23,17 @@ void print_value(val v) {
 }
 
 char * value_to_str(val v){
+  char * strOut = (char *) malloc(20*sizeof(char));
   if (!(v & BOOL_BITMASK)) { // integer
-    return "%ld", v >> 1;
+    sprintf(strOut, "%ld", v >> 1);
+    return strOut;
   } else if (v == BOOL_TRUE) {
     return "true";
   } else if (v == BOOL_FALSE) {
     return "false";
   } else {
-    return "Unknown value: %#018x", v;
+    sprintf(strOut, "Unknown value: %#018x", v);
+    return strOut;
   }
 }
 
@@ -42,7 +45,7 @@ void error(int errCode, val v) {
   if (errCode == ERR_NOT_NUMBER) {
     fprintf(stderr, "Expected number, but got %s\n", value_to_str(v));
   } else if (errCode == ERR_NOT_BOOLEAN) {
-    fprintf(stderr, "Expected boolean, but got %010x\n", v);
+    fprintf(stderr, "Expected boolean, but got %s\n", value_to_str(v));
   }
   exit(errCode);
 }

@@ -13,6 +13,7 @@ let error_register = Reg RCX
 
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
+let not_a_boolean = Const 2L 
 
 (* 
   A gensym for standard symbols and specific instructions
@@ -83,14 +84,15 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
 
-let check_int_operators  = 
-  [IMov (error_code_register, not_a_number); 
-  IMov (error_register, return_register);
-  ITest (return_register, Const 1L); 
-  IJnz "error_handler"; 
-  IMov (error_register, argument_register);
-  ITest (argument_register, Const 1L); 
-  IJnz "error_handler"; ]
+let check_arg (register: arg) (type_error: arg) : instruction list =
+  [IMov (error_code_register, type_error)] @
+  [IMov (error_register, register)] @
+  [ITest (error_register, Const 1L)] @
+  if type_error == not_a_number then
+  [IJnz "error_handler"] else [IJz "error_handler"]
+  
+let check_binops (type_error: arg) =
+  check_arg return_register type_error @ check_arg argument_register type_error
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -99,9 +101,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Bool p -> [ IMov (return_register, Const (encode_bool p)) ]
   | UnOp (op, e) ->
     begin match op with
-      | Add1 -> compile_expr e env @ [IAdd (return_register, Const 2L)]
-      | Sub1 -> compile_expr e env @ [ISub (return_register, Const 2L)]
-      | Not -> compile_expr e env @ [IMov (argument_register, Const bool_bit) ;
+      | Add1 -> compile_expr e env @ check_arg return_register not_a_number @ [IAdd (return_register, Const 2L)]
+      | Sub1 -> compile_expr e env @ check_arg return_register not_a_number @ [ISub (return_register, Const 2L)]
+      | Not ->  compile_expr e env @ check_arg return_register not_a_boolean @ [IMov (argument_register, Const bool_bit) ;
         IXor (return_register, argument_register)]
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
@@ -112,25 +114,25 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       let compiled_val = compile_expr v env in
       let save_val     = [ IMov(RegOffset (RBP, slot), return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
-  | BinOp (op,l,r) ->
+  | BinOp (op, l, r) ->
     begin
       match op with
       | Add -> compile_binop_preamble l r env compile_expr 
-        @ check_int_operators 
+        @ check_binops not_a_number (* Type Checking *)
         @ [IAdd (return_register, argument_register)]
       | Sub -> compile_binop_preamble l r env compile_expr
-        @ check_int_operators 
+        @ check_binops not_a_number (* Type Checking *)
         @ [ISub (return_register, argument_register)]
       | Mul -> compile_binop_preamble l r env compile_expr
-        @ check_int_operators 
+        @ check_binops not_a_number (* Type Checking *)
         @ [IMul (return_register, argument_register) ; ISar (return_register, Const 1L)]
       | Div -> compile_binop_preamble l r env compile_expr
-        @ check_int_operators 
+        @ check_binops not_a_number (* Type Checking *)
         @ [ICqo ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
       | Less -> 
         let less_lbl = gensym "less" in
         compile_binop_preamble l r env compile_expr 
-        @ check_int_operators
+        @ check_binops not_a_number (* Type Checking *)
         @ compile_binop_comparator less_lbl (IJl less_lbl)
       | Eq ->
         let eq_lbl =  gensym "eq" in
