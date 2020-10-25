@@ -1,4 +1,4 @@
-NAME: divNeg
+NAME: Negative cocient
 DESCRIPTION: divides a positive number by a negative number
 SRC:
 (/ 9 -3)

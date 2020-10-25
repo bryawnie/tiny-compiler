@@ -1,7 +1,7 @@
-NAME: (+ boolean number)
+NAME: (+ boolean boolean)
 DESCRIPTION: should fail
 STATUS: RT error
 SRC:
-(+ true 5)
+(+ (< 3 5) false)
 EXPECTED:
 Expected number, but got true

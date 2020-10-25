@@ -1,0 +1,3 @@
+NAME: Boolean AND operator (true & true)
+SRC: (and true true)
+EXPECTED: true

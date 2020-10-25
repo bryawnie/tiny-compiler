@@ -1,4 +1,4 @@
-NAME: Div between boolean and boolean
+NAME: (/ boolean boolean)
 DESCRIPTION: should fail
 STATUS: RT error
 SRC:

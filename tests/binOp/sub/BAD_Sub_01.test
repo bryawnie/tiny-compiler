@@ -1,4 +1,4 @@
-NAME: Substraction between number and boolean
+NAME: (- bool num)
 DESCRIPTION: should fail
 STATUS: RT error
 SRC:

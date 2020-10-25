@@ -1,0 +1,6 @@
+NAME: Substraction by a negative
+DESCRIPTION: A substraction by a negative
+SRC:
+(- 5 -3)
+EXPECTED:
+8

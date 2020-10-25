@@ -1,4 +1,4 @@
-NAME: Less (<) test
+NAME: Less (< 5 3) test 
 DESCRIPTION: Tests the support of <
 SRC: 
 (< 5 3)
