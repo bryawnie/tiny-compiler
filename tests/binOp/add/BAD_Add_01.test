@@ -1,0 +1,7 @@
+NAME: Addition between number and boolean
+DESCRIPTION: should fail
+STATUS: RT error
+SRC:
+(+ true 5)
+EXPECTED:
+Expected number, but got true

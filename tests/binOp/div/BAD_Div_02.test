@@ -1,0 +1,7 @@
+NAME: Div between boolean and boolean
+DESCRIPTION: should fail
+STATUS: RT error
+SRC:
+(/ true false)
+EXPECTED:
+Expected number, but got true

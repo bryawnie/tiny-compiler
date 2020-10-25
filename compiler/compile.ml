@@ -8,7 +8,11 @@ open Encode
     R11 = second argument to a instruction *)
 let return_register = Reg RAX
 let argument_register = Reg R11
+let error_code_register = Reg RBX
+let error_register = Reg RCX
 
+(* INTEGER ERROR CODES *)
+let not_a_number = Const 1L
 
 (* 
   A gensym for standard symbols and specific instructions
@@ -79,6 +83,14 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
 
+let check_int_operators  = 
+  [IMov (error_code_register, not_a_number); 
+  IMov (error_register, return_register);
+  ITest (return_register, Const 1L); 
+  IJnz "error_handler"; 
+  IMov (error_register, argument_register);
+  ITest (argument_register, Const 1L); 
+  IJnz "error_handler"; ]
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -104,16 +116,21 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     begin
       match op with
       | Add -> compile_binop_preamble l r env compile_expr 
+        @ check_int_operators 
         @ [IAdd (return_register, argument_register)]
       | Sub -> compile_binop_preamble l r env compile_expr
+        @ check_int_operators 
         @ [ISub (return_register, argument_register)]
       | Mul -> compile_binop_preamble l r env compile_expr
+        @ check_int_operators 
         @ [IMul (return_register, argument_register) ; ISar (return_register, Const 1L)]
       | Div -> compile_binop_preamble l r env compile_expr
+        @ check_int_operators 
         @ [ICqo ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
       | Less -> 
         let less_lbl = gensym "less" in
         compile_binop_preamble l r env compile_expr 
+        @ check_int_operators
         @ compile_binop_comparator less_lbl (IJl less_lbl)
       | Eq ->
         let eq_lbl =  gensym "eq" in
@@ -124,7 +141,12 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
     end
   | If (c, t, f) -> (compile_expr c env) @ compile_if compile_expr t f env
- 
+
+let error_handler =
+ [ILabel "error_handler";
+  IMov (Reg RSI, error_register);
+  IMov (Reg RDI, error_code_register);
+  ICall "error"]
 
 (* Generates the compiled program *)
 let compile_prog : expr Fmt.t =
@@ -132,6 +154,7 @@ let compile_prog : expr Fmt.t =
   let instrs = compile_expr e empty_env in
   let prelude ="
 section .text
+extern error
 global our_code_starts_here
 our_code_starts_here:
   push RBP
@@ -141,7 +164,7 @@ our_code_starts_here:
   mov  RSP, RBP
   pop  RBP
   ret" in
-Fmt.pf fmt "%s@\n%a%s" prelude pp_instrs instrs epilogue
+Fmt.pf fmt "%s@\n%a%s\n%a" prelude pp_instrs instrs epilogue pp_instrs error_handler
 
 (* The Pipeline *)
 let compile_src = 

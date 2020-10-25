@@ -1,11 +1,22 @@
 (* registers *)
 type reg = 
-| RAX
+| RAX   (* Main Register *)
 | RBX
-| RDX
-| RSP
-| RBP
-| R11
+| RCX   (* 4th Param *)
+| RDX   (* 3rd Param *)
+| RSI   (* 1st Param *)
+| RDI   (* 2nd Param *)
+| RSP   (* Stack Pointer *)
+| RBP   (* Base Pointer *)
+| R8    (* 5th Param *)
+| R9    (* 6th Param *)
+| R10
+| R11   (* Temp Register *)
+(* 
+| R12
+| R13
+| R14
+| R15 *)
 
 
 (* arguments for instructions *)
@@ -27,10 +38,14 @@ type instruction =
 | IDiv of arg         (* Divides RDX RAX / arg *)
 | ISar of arg * arg   (* Arithmetic Right Shift *)
 | ISal of arg * arg   (* Arithmetic Left Shift *)
-| ICmp of arg * arg   (* Comparer *)
+| ICmp of arg * arg   (* Comparer (-) *)
+| ITest of arg * arg  (* Comparer (&) *)
 | IJe  of string      (* Jumps if equal *)
+| IJnz of string      (* Jumps if not zero *)
+| IJz of string       (* Jumps if zero *)
 | IJl  of string      (* Jumps if less than *)
 | IJmp of string      (* Makes a jump *)
+| ICall of string     (* Calls a function *)
 | ILabel of string    (* Simple Label *)
 | ICqo                (* Extends RAX into RDX *)
 | IRet                (* Return *)
@@ -42,9 +57,15 @@ let pp_reg : reg Fmt.t =
     match r with
     | RAX -> Fmt.string fmt "RAX"
     | RBX -> Fmt.string fmt "RBX"
+    | RCX -> Fmt.string fmt "RCX"
     | RDX -> Fmt.string fmt "RDX"
+    | RSI -> Fmt.string fmt "RSI"
+    | RDI -> Fmt.string fmt "RDI"
     | RSP -> Fmt.string fmt "RSP"
     | RBP -> Fmt.string fmt "RBP"
+    | R8  -> Fmt.string fmt "R8"
+    | R9  -> Fmt.string fmt "R9"
+    | R10 -> Fmt.string fmt "R10"
     | R11 -> Fmt.string fmt "R11"
 
 
@@ -69,12 +90,16 @@ let pp_instr : instruction Fmt.t =
   | ISar (a1, a2) -> Fmt.pf fmt "  sar  %a, %a" pp_arg a1 pp_arg a2
   | ISal (a1, a2) -> Fmt.pf fmt "  sal  %a, %a" pp_arg a1 pp_arg a2
   | ICmp (a1, a2) -> Fmt.pf fmt "  cmp  %a, %a" pp_arg a1 pp_arg a2
+  | ITest (a1, a2)-> Fmt.pf fmt "  test %a, %a" pp_arg a1 pp_arg a2
   | IJe  lbl      -> Fmt.pf fmt "  je   %a" Fmt.string lbl
+  | IJz  lbl      -> Fmt.pf fmt "  jz   %a" Fmt.string lbl
+  | IJnz lbl      -> Fmt.pf fmt "  jnz  %a" Fmt.string lbl
   | IJl  lbl      -> Fmt.pf fmt "  jl   %a" Fmt.string lbl
   | IJmp lbl      -> Fmt.pf fmt "  jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | ICqo          -> Fmt.pf fmt "  cqo" 
   | IRet          -> Fmt.pf fmt "  ret" 
+  | ICall f       -> Fmt.pf fmt "  call %a" Fmt.string f
   | IOr (a1, a2)  -> Fmt.pf fmt "  or   %a, %a" pp_arg a1 pp_arg a2
   | IAnd (a1, a2) -> Fmt.pf fmt "  and  %a, %a" pp_arg a1 pp_arg a2
   | IXor (a1, a2) -> Fmt.pf fmt "  xor  %a, %a" pp_arg a1 pp_arg a2
