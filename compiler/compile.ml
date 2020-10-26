@@ -95,6 +95,30 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ [ IJmp (done_lbl); ILabel(false_lbl) ]
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
+ 
+let args_regs = [
+  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+]
+
+let rec prepare_args (args: arg list) (regs: arg list): instruction list =
+  match args, regs with
+  | [], _ -> []
+  | a::tail_args, reg::tail_regs -> [IMov (reg, a)] @ prepare_args tail_args tail_regs
+  | a::tail_args, [] -> [IPush a] @ prepare_args tail_args []
+
+
+let fun_asm_c (name: string) (args: arg list) : instruction list =
+  let args_prepared = List.rev(prepare_args args args_regs) in
+  let arity = List.length args in
+  let args_in_stack = arity - 6 in
+  [ILabel (gensym name)] @
+  [IPush return_register ] @
+  args_prepared @
+  [ICall name]  @
+  if args_in_stack > 0 then [IAdd (Reg RSP, Const (Int64.of_int args_in_stack) )] else [] @
+  [IPop (return_register)] @
+  [ILabel (gensym ("end_"^name))]
+
 
 let call_print () : instruction list =
   [ILabel (gensym "print")] @
@@ -119,7 +143,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         before use as an operand *)
     end
   | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
-  | Print e -> compile_expr e env @ call_print ()
+  | Print e -> compile_expr e env @ fun_asm_c "print" [(Reg RAX)] (* call_print () *)
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -155,11 +179,24 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     end
   | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
 
+(* Label for handling errors *)
 let error_handler =
  [ILabel "error_handler";
   IMov (Reg RSI, error_register);
   IMov (Reg RDI, error_code_register);
   ICall "error"]
+
+(* Callee - Save  @ Init *)
+let callee_prologue = [
+  IPush (Reg RBP);
+  IMov (Reg RBP, Reg RSP);
+]
+
+(* Callee - Save  @ End *)
+let callee_epilogue = [
+  IMov (Reg RSP, Reg RBP);
+  IPop (Reg RBP)
+]
 
 (* Generates the compiled program *)
 let compile_prog : expr Fmt.t =
@@ -167,18 +204,13 @@ let compile_prog : expr Fmt.t =
   let instrs = compile_expr e empty_env in
   let prelude ="
 section .text
-extern print_value
+extern print
 extern error
 global our_code_starts_here
-our_code_starts_here:
-  push RBP
-  mov  RBP, RSP
-  sub  RSP, 80" in (* Momentáneo *)
-  let epilogue = "
-  mov  RSP, RBP
-  pop  RBP
-  ret" in
-Fmt.pf fmt "%s@\n%a%s\n%a" prelude pp_instrs instrs epilogue pp_instrs error_handler
+our_code_starts_here:" in
+  Fmt.pf fmt "%s@\n%a" prelude pp_instrs (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+  @ instrs @ callee_epilogue @ [IRet] @ error_handler)
+
 
 (* The Pipeline *)
 let compile_src = 

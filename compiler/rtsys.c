@@ -38,7 +38,7 @@ void error(int errCode, val v) {
   exit(errCode);
 }
 
-void print_value(val v) {
+void print(val v) {
   if (!(v & BOOL_BITMASK)) { // integer
     printf("> %ld\n", v >> 1);
   } else if (v == BOOL_TRUE) {
