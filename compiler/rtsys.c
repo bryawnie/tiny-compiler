@@ -10,18 +10,6 @@ const val BOOL_BITMASK = 0x0000000000000001;
 const val BOOL_TRUE = 0x8000000000000001;
 const val BOOL_FALSE = 0x0000000000000001;
 
-void print_value(val v) {
-  if (!(v & BOOL_BITMASK)) { // integer
-    printf("%ld", v >> 1);
-  } else if (v == BOOL_TRUE) {
-    printf("true");
-  } else if (v == BOOL_FALSE) {
-    printf("false");
-  } else {
-    printf("Unknown value: %#018x", v);
-  }
-}
-
 char * value_to_str(val v){
   char * strOut = (char *) malloc(21*sizeof(char));
   if (!(v & BOOL_BITMASK)) { // integer
@@ -50,8 +38,20 @@ void error(int errCode, val v) {
   exit(errCode);
 }
 
+void print_value(val v) {
+  if (!(v & BOOL_BITMASK)) { // integer
+    printf("> %ld\n", v >> 1);
+  } else if (v == BOOL_TRUE) {
+    printf("> true\n");
+  } else if (v == BOOL_FALSE) {
+    printf("> false\n");
+  } else {
+    printf("> Unknown value: %#018x\n", v);
+  }
+}
+
 int main(int argc, char** argv) {
   val result = our_code_starts_here();
-  print_value(result);
+  printf(value_to_str(result));
   return 0;
 }

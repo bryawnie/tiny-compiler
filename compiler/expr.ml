@@ -37,6 +37,7 @@ type expr =
   | Num of int64
   | Bool of bool
   | Id of string
+  | Print of expr
   | UnOp of unOp * expr
   | BinOp of binOp * expr * expr
   | Let of string * expr * expr
@@ -69,6 +70,7 @@ let rec pp_expr fmt = function
   | Num n -> int64 fmt n
   | Bool b -> bool fmt b
   | Id x -> string fmt x
+  | Print x -> pf fmt "(print %a)" pp_expr x
   | UnOp (op, e) -> pf fmt "(%a %a)" pp_unop op pp_expr e
   | BinOp (op, x1, x2) -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
   | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b

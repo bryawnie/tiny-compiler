@@ -48,6 +48,8 @@ type instruction =
 | ICall of string     (* Calls a function *)
 | ILabel of string    (* Simple Label *)
 | ICqo                (* Extends RAX into RDX *)
+| IPush of arg        (* Pushes an argument into the stack *)
+| IPop of arg         (* Pop a value from stack *)
 | IRet                (* Return *)
 
 
@@ -103,6 +105,8 @@ let pp_instr : instruction Fmt.t =
   | IOr (a1, a2)  -> Fmt.pf fmt "  or   %a, %a" pp_arg a1 pp_arg a2
   | IAnd (a1, a2) -> Fmt.pf fmt "  and  %a, %a" pp_arg a1 pp_arg a2
   | IXor (a1, a2) -> Fmt.pf fmt "  xor  %a, %a" pp_arg a1 pp_arg a2
+  | IPush x       -> Fmt.pf fmt "  push %a" pp_arg x
+  | IPop x       ->  Fmt.pf fmt "  pop  %a" pp_arg x
 
 
 (* A pretty printing for instruction list *)

@@ -96,6 +96,13 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
 
+let call_print () : instruction list =
+  [ILabel (gensym "print")] @
+  [IPush (return_register)] @
+  [IMov (Reg RDI, return_register)] @
+  [ICall "print_value"] @
+  [IPop (return_register)] @
+  [ILabel (gensym "end_print")]
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -112,6 +119,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         before use as an operand *)
     end
   | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
+  | Print e -> compile_expr e env @ call_print ()
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -159,6 +167,7 @@ let compile_prog : expr Fmt.t =
   let instrs = compile_expr e empty_env in
   let prelude ="
 section .text
+extern print_value
 extern error
 global our_code_starts_here
 our_code_starts_here:

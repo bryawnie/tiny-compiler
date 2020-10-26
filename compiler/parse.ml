@@ -43,6 +43,7 @@ let rec parse (sexp : sexp) : expr =
       | Some n -> Num n
       | None -> Id s 
     end
+  | `List [`Atom "print" ; e ] -> Print (parse e) 
   | `List [`Atom "add1" ; e ] -> UnOp (Add1, parse e) 
   | `List [`Atom "sub1" ; e ] -> UnOp (Sub1, parse e)
   | `List [`Atom "not" ; e ] -> UnOp (Not, parse e)
