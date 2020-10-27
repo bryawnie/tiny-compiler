@@ -119,7 +119,7 @@ let rec pop_regs (n: int) (regs: arg list): instruction list =
 let rec prepare_call (ins: instruction list list) (regs: arg list): instruction list list =
   match ins, regs with
   | [], _ -> []
-  | i::tail_args, reg::tail_regs -> [i @ [IPush return_register] @ [IMov (reg, return_register)] ] @ prepare_call tail_args tail_regs
+  | i::tail_args, reg::tail_regs -> [i @ [IMov (reg, return_register)] ] @ prepare_call tail_args tail_regs
   | i::tail_args, [] -> [ i @ [IPush return_register]] @ prepare_call tail_args []
 
 
@@ -207,7 +207,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     let prepare_call  = instLL_to_instL prepare_args in
     let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
     let popped_regs   = pop_regs arity args_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ [IPop (Reg RAX)] @ popped_regs 
+    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
 
 
 (* Label for handling errors *)
@@ -236,6 +236,8 @@ let compile_prog : expr Fmt.t =
   let prelude ="
 section .text
 extern print
+extern min
+extern min_of_8
 extern error
 global our_code_starts_here
 our_code_starts_here:" in

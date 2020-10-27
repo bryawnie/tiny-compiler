@@ -1,0 +1,6 @@
+NAME: Testing min_of_8
+DESCRIPTION: tests functions with 8 arguments
+SRC:
+(min_of_8 9 8 7 6 5 4 3 2)
+EXPECTED:
+2

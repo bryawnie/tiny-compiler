@@ -64,5 +64,4 @@ let rec parse (sexp : sexp) : expr =
       | Some _ -> Fmt.failwith "Not a valid function: %s" fname
       | None -> App (fname, List.map parse args) (* FIX *)
     end 
-
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e

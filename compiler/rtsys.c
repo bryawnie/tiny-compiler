@@ -38,7 +38,7 @@ void error(int errCode, val v) {
   exit(errCode);
 }
 
-void print(val v) {
+val print(val v) {
   if (!(v & BOOL_BITMASK)) { // integer
     printf("> %ld\n", v >> 1);
   } else if (v == BOOL_TRUE) {
@@ -48,6 +48,17 @@ void print(val v) {
   } else {
     printf("> Unknown value: %#018x\n", v);
   }
+  return v;
+}
+
+val min(val v1, val v2){
+  if (v1 < v2)
+    return v1;
+  return v2;
+}
+
+val min_of_8(val v1, val v2, val v3, val v4, val v5, val v6, val v7, val v8){
+  return min(min(min(v1, v2), min(v3, v4)), min(min(v5, v6), min(v7, v8)));
 }
 
 int main(int argc, char** argv) {
