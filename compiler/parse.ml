@@ -43,7 +43,6 @@ let rec parse (sexp : sexp) : expr =
       | Some n -> Num n
       | None -> Id s 
     end
-  | `List [`Atom "print" ; e ] -> Print (parse e) 
   | `List [`Atom "add1" ; e ] -> UnOp (Add1, parse e) 
   | `List [`Atom "sub1" ; e ] -> UnOp (Sub1, parse e)
   | `List [`Atom "not" ; e ] -> UnOp (Not, parse e)
@@ -57,4 +56,5 @@ let rec parse (sexp : sexp) : expr =
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse l, parse r)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse e, parse body)
   | `List [`Atom "if" ; c; t; f] -> If (parse c, parse t, parse f)
+  | `List [`Atom fname ;  args ] -> App (fname,[parse args]) 
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e

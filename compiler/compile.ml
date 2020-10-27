@@ -100,14 +100,35 @@ let args_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
 ]
 
-let rec prepare_args (args: arg list) (regs: arg list): instruction list =
-  match args, regs with
+let rec push_regs (n: int) (regs: arg list): instruction list =
+  if n>0 then
+    begin match regs with
+    | [] -> []
+    | r::tail -> [IPush r] @ push_regs (n-1) tail
+    end
+  else []
+
+let rec pop_regs (n: int) (regs: arg list): instruction list =
+  if n>0 then
+    begin match regs with
+    | [] -> []
+    | r::tail -> [IPop r] @ pop_regs (n-1) tail
+    end
+  else []
+
+let rec prepare_call (ins: instruction list list) (regs: arg list): instruction list list =
+  match ins, regs with
   | [], _ -> []
-  | a::tail_args, reg::tail_regs -> [IMov (reg, a)] @ prepare_args tail_args tail_regs
-  | a::tail_args, [] -> [IPush a] @ prepare_args tail_args []
+  | i::tail_args, reg::tail_regs -> [i @ [IPush return_register] @ [IMov (reg, return_register)] ] @ prepare_call tail_args tail_regs
+  | i::tail_args, [] -> [ i @ [IPush return_register]] @ prepare_call tail_args []
 
 
-let fun_asm_c (name: string) (args: arg list) : instruction list =
+let rec instLL_to_instL (ins: instruction list list) =
+  match ins with
+  | [] -> []
+  | x::tail -> x @ instLL_to_instL tail
+
+(* let fun_asm_c (name: string) (args: arg list) (compile: expr -> env -> instruction list): instruction list =
   let args_prepared = List.rev(prepare_args args args_regs) in
   let arity = List.length args in
   let args_in_stack = arity - 6 in
@@ -126,7 +147,7 @@ let call_print () : instruction list =
   [IMov (Reg RDI, return_register)] @
   [ICall "print_value"] @
   [IPop (return_register)] @
-  [ILabel (gensym "end_print")]
+  [ILabel (gensym "end_print")] *)
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -143,7 +164,6 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         before use as an operand *)
     end
   | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
-  | Print e -> compile_expr e env @ fun_asm_c "print" [(Reg RAX)] (* call_print () *)
   | Let (id,v,b) -> 
       let (new_env, slot) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -178,6 +198,17 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
     end
   | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
+  | App (fname, args) ->
+    let curry_compile = fun expr -> compile_expr expr env in
+    let arity = List.length args in
+    let compiled_args = List.map curry_compile args in
+    let pushed_regs   = List.rev (push_regs arity args_regs) in
+    let prepare_args  = List.rev (prepare_call compiled_args args_regs) in 
+    let prepare_call  = instLL_to_instL prepare_args in
+    let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
+    let popped_regs   = pop_regs arity args_regs in
+    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ [IPop (Reg RAX)] @ popped_regs 
+
 
 (* Label for handling errors *)
 let error_handler =
