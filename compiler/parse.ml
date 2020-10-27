@@ -34,6 +34,8 @@ let sexp_from_file (filename : string) : CCSexp.sexp =
 
 open Expr
 
+let notFuns = ["true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*"; "/"; "if"; "let"; "<"; "="]
+
 let rec parse (sexp : sexp) : expr = 
   match sexp with
   | `Atom "true" -> Bool true
@@ -56,5 +58,11 @@ let rec parse (sexp : sexp) : expr =
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse l, parse r)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse e, parse body)
   | `List [`Atom "if" ; c; t; f] -> If (parse c, parse t, parse f)
-  | `List [`Atom fname ;  args ] -> App (fname,[parse args]) 
+  | `List (`Atom fname::args) -> 
+    if List.mem fname notFuns then Fmt.failwith "Not a valid function: %s" fname else
+    begin match Int64.of_string_opt fname with
+      | Some _ -> Fmt.failwith "Not a valid function: %s" fname
+      | None -> App (fname, List.map parse args) (* FIX *)
+    end 
+
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
