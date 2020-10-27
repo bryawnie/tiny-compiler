@@ -1,0 +1,6 @@
+NAME: Equal (= false false) test 
+DESCRIPTION: Tests the support of =
+SRC: 
+(= false false)
+EXPECTED: 
+true

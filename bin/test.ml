@@ -74,18 +74,14 @@ let parse_tests =
 
   (* An example of a test catching an error *)
   let test_parse_error () =
-    let sexp = `List [`Atom "foo"; `Atom "bar"] in
-    check_raises "Should raise failwith" 
-      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp sexp))
-      (fun () -> ignore @@ parse sexp) ;
     check_raises "Should fail"
-      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(true)")))
+      (Failure (Fmt.strf "Not a valid function: %a" CCSexp.pp (sexp_from_string "true")))
       (fun () -> ignore @@ parse (sexp_from_string "(if (true) 5 6)")) ;
     check_raises "Should fail"
-      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(+ 4 5 6)")))
+      (Failure (Fmt.strf "Not a valid function: %a" CCSexp.pp (sexp_from_string "+")))
       (fun () -> ignore @@ parse (sexp_from_string "(+ 4 5 6)")) ;
     check_raises "Should fail"
-      (Failure (Fmt.strf "Not a valid exp: %a" CCSexp.pp (sexp_from_string "(4 * 8)")))
+      (Failure (Fmt.strf "Not a valid function: %a" CCSexp.pp (sexp_from_string "4")))
       (fun () -> ignore @@ parse (sexp_from_string "(4 * 8)")) ;
   in
 

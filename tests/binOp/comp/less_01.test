@@ -1,0 +1,6 @@
+NAME: Less (< 1 7) test 
+DESCRIPTION: Tests the support of <
+SRC: 
+(< 1 7)
+EXPECTED: 
+true

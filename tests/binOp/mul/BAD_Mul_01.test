@@ -1,0 +1,7 @@
+NAME: (* num bool)
+DESCRIPTION: should fail
+STATUS: RT error
+SRC:
+(* 10 false)
+EXPECTED:
+Expected number, but got false

@@ -1,0 +1,7 @@
+NAME: If number
+DESCRIPTION: Type checking for if sentences
+STATUS: RT error
+SRC: 
+(if 3 5 6)
+EXPECTED: 
+Expected boolean, but got 3

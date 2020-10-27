@@ -1,0 +1,6 @@
+NAME: multNeg
+DESCRIPTION: product of a positive number with a negative number
+SRC:
+(* 5 (* 4 -3))
+EXPECTED:
+|INTERPRET

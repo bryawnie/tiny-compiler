@@ -1,3 +1,0 @@
-NAME: Boolean AND operator
-SRC: (and true false)
-EXPECTED: false

@@ -1,0 +1,14 @@
+NAME: Multiple print
+DESCRIPTION: lets make it more interesting
+SRC:
+(let (x (print (+ (print 2) 3)))
+  (if (print (< (print 3) 2)) 
+    (print 5)
+    (not (print true))))
+EXPECTED:
+> 2
+> 5
+> 3
+> false
+> true
+false

@@ -1,0 +1,8 @@
+NAME: Enunciado print test
+DESCRIPTION: from Enunciado
+SRC:
+(let (x (print (+ 2 3)))
+  (+ x 1))
+EXPECTED:
+> 5
+6

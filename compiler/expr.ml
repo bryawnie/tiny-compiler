@@ -41,6 +41,7 @@ type expr =
   | BinOp of binOp * expr * expr
   | Let of string * expr * expr
   | If of expr * expr * expr
+  | App of string * expr list
 
 open Fmt
 
@@ -64,8 +65,16 @@ let pp_binop fmt = function op ->
   | Eq   -> "="
   in string fmt str
 
+let rec pp_expr_list  (pp_exp: expr Fmt.t): (expr list) Fmt.t =
+  fun fmt l ->
+    match l with
+    | [] -> pf fmt ""
+    | e::rest -> pf fmt "%a %a" pp_exp e (pp_expr_list pp_exp) rest
+
+  
 (* Pretty printer for expresions *)
-let rec pp_expr fmt = function
+let rec pp_expr fmt = 
+  function
   | Num n -> int64 fmt n
   | Bool b -> bool fmt b
   | Id x -> string fmt x
@@ -73,3 +82,4 @@ let rec pp_expr fmt = function
   | BinOp (op, x1, x2) -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
   | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
   | If (c, t, f) -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
+  | App (fname, exprs) -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs 

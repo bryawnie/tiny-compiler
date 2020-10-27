@@ -1,0 +1,4 @@
+NAME: (or true number)
+DESCRIPTION: Checks that second expression is not evaluated
+SRC: (or true 5)
+EXPECTED: true

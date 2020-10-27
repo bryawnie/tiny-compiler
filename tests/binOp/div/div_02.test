@@ -1,0 +1,6 @@
+NAME: (< 1) Divide 4 in 9
+DESCRIPTION: divides a number
+SRC:
+(/ 4 9)
+EXPECTED:
+0

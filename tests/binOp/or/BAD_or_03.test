@@ -1,0 +1,7 @@
+NAME: (or number number)
+DESCRIPTION: should fail
+STATUS: RT error
+SRC:
+(or 3 5)
+EXPECTED:
+Expected boolean, but got 3

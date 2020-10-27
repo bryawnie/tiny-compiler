@@ -1,0 +1,8 @@
+NAME: print for booleans
+DESCRIPTION: boolean print
+SRC:
+(let (x (print (and true false)))
+  (or x true))
+EXPECTED:
+> false
+true
