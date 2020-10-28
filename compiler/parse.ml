@@ -25,6 +25,11 @@ let sexp_from_string (src : string) : CCSexp.sexp =
   | Ok s -> s
   | Error msg -> Fmt.failwith "Unable to parse src %s: %s" src msg
 
+let sexp_list_from_string (src : string) : CCSexp.sexp list =
+  match CCSexp.parse_string_list src with
+  | Ok s -> s
+  | Error msg -> Fmt.failwith "Unable to parse src %s: %s" src msg
+
 let sexp_from_file (filename : string) : CCSexp.sexp =
   match CCSexp.parse_file filename with
   | Ok s -> s
@@ -32,7 +37,7 @@ let sexp_from_file (filename : string) : CCSexp.sexp =
 
 
 
-open Expr
+open Ast
 
 let notFuns = ["true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*"; "/"; "if"; "let"; "<"; "="]
 
@@ -58,10 +63,28 @@ let rec parse (sexp : sexp) : expr =
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse l, parse r)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse e, parse body)
   | `List [`Atom "if" ; c; t; f] -> If (parse c, parse t, parse f)
+  | `List [`Atom "print" ; e] -> App ("print", [parse e])
   | `List (`Atom fname::args) -> 
-    if List.mem fname notFuns then Fmt.failwith "Not a valid function: %s" fname else
+    if List.mem fname notFuns
+      then Fmt.failwith "Not a valid function: %s" fname else
     begin match Int64.of_string_opt fname with
       | Some _ -> Fmt.failwith "Not a valid function: %s" fname
       | None -> App (fname, List.map parse args) (* FIX *)
     end 
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
+
+let parse_param (sexp : sexp) : string =
+  match sexp with
+  | `Atom id -> id
+  | _ -> Fmt.failwith "Not a valid parameter name: %a" CCSexp.pp sexp
+
+let parse_decl (sexp : sexp) : decl = 
+  match sexp with
+  | `List [`Atom "def" ; `List (`Atom name :: params) ; body] ->
+    FunDef (name, List.map parse_param params, parse body)
+  | _ -> Fmt.failwith "Not a valid declaration: %a" CCSexp.pp sexp
+
+let parse_prog (sexps : sexp list) : prog = 
+  match List.rev sexps with
+  | expr::decls -> Program (List.map parse_decl decls, parse expr)
+  | [] -> Program ([], Void)

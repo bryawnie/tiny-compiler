@@ -58,7 +58,7 @@ let liftEqV : value -> value -> value =
     | BoolV n1, BoolV n2 -> BoolV (n1 = n2)
     | _ -> BoolV false
 
-open Expr
+open Ast
 
 (** Interpreter Environment **)
 type ienv = (string * value) list
@@ -98,3 +98,4 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
       | And -> BoolV (unpackBoolV (interp ~env:env l) && unpackBoolV (interp ~env:env r))
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
+  | Void -> NumV 0L (* This is supposed to do nothing *)

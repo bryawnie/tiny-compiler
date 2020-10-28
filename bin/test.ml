@@ -1,8 +1,12 @@
 open Compiler
-open Expr
+open Ast
 open Compile
 open Alcotest
 
+let decl : decl testable =
+  testable pp_decl (=)
+let prog : prog testable =
+  testable pp_prog (=)
 let expr : expr testable =
   testable pp_expr (=)
 
@@ -85,11 +89,26 @@ let parse_tests =
       (fun () -> ignore @@ parse (sexp_from_string "(4 * 8)")) ;
   in
 
+  let test_parse_declarations () =
+    check decl "Same declaration"
+      (FunDef ("f", ["x" ; "y"], BinOp (Add, Id "x", Id "y")))
+      (parse_decl @@ sexp_from_string "(def (f x y) (+ x y))")
+  in
+
+  let test_parse_program () =
+    check prog "Same program"
+      (Program ([FunDef ("f", ["x"], Id "x")], App ("f", [Num 1L])))
+      (parse_prog @@ sexp_list_from_string 
+        "(def (f x) x)\n(f 1)")
+  in
+
   "parse", [
     test_case "A number" `Quick test_parse_int ;
     test_case "A compound expression" `Quick test_parse_compound ;
     test_case "All expressions" `Quick test_parse_expressions;
-    test_case "An invalid s-expression" `Quick test_parse_error
+    test_case "An invalid s-expression" `Quick test_parse_error ;
+    test_case "Declarations" `Quick test_parse_declarations ;
+    test_case "Full program with declarations" `Quick test_parse_program ;
   ]
 
 
