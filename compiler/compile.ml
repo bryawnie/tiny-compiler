@@ -1,4 +1,4 @@
-open Expr
+open Ast
 open Asm
 open Env
 open Encode
@@ -10,6 +10,9 @@ let return_register = Reg RAX
 let argument_register = Reg R11
 let error_code_register = Reg RBX
 let error_register = Reg RCX
+let args_regs = [
+  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+]
 
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
@@ -96,10 +99,6 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
  
-let args_regs = [
-  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
-]
-
 let rec push_regs (n: int) (regs: arg list): instruction list =
   if n>0 then
     begin match regs with
@@ -207,7 +206,8 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     let prepare_call  = instLL_to_instL prepare_args in
     let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
     let popped_regs   = pop_regs arity args_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
+    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
+  | Void -> []
 
 
 (* Label for handling errors *)
