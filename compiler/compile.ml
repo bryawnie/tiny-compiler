@@ -56,10 +56,10 @@ into RAX (return_register), and the right one into R11 (argument_register).*)
 let compile_binop_preamble (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =
   let compiled_right = compiler r env in
-  let new_env, slot = extend_env (gensym "tmp") env in
+  let new_env, loc = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ 
-  compiled_left  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
+  compiled_right @ [ IMov (loc, return_register) ] @ 
+  compiled_left  @ [ IMov (argument_register, loc) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -162,11 +162,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
     end
-  | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
+  | Id x  -> [ IMov (return_register, lookup x env) ]
   | Let (id,v,b) -> 
-      let (new_env, slot) = extend_env id env in
+      let (new_env, loc) = extend_env id env in
       let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(RegOffset (RBP, slot), return_register) ] in
+      let save_val     = [ IMov(loc, return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op, l, r) ->
     begin
@@ -229,20 +229,10 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
-let extend_env_args (params : string list) : env =
-  match List.length params with
-  | 0 -> empty_env
-  | 1 -> []
-  | 2 -> []
-  | 3 -> []
-  | 4 -> []
-  | 5 -> []
-  | 6 -> []
-  | n -> [] (*FIXME*)
 let compile_declaration (d : decl) : instruction list =
   match d with 
   | FunDef (fname, params, body) ->
-    let env = extend_env_args params in
+    let env = make_function_env params empty_env in
     [ILabel fname] @ callee_epilogue 
     @ compile_expr body env @ callee_epilogue
 
