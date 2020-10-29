@@ -39,7 +39,9 @@ let sexp_from_file (filename : string) : CCSexp.sexp =
 
 open Ast
 
-let notFuns = ["true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*"; "/"; "if"; "let"; "<"; "="]
+let notFuns = [
+  "true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*"; "/";
+  "if"; "let"; "<"; "="; "def"]
 
 let rec parse (sexp : sexp) : expr = 
   match sexp with

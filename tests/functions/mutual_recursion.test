@@ -1,0 +1,18 @@
+NAME: mutual recursion
+DESCRIPTION: mutually rescursive function definition
+SRC:
+(def (pin n)
+    (if (= n 0)
+        0
+        (pon (print (- 1 n)))))
+(def (pon n)
+    (if (= n 0)
+        0
+        (pin (print (- -1 n)))))
+
+(pin 4)
+EXPECTED:
+> -3
+> 2
+> -1
+0

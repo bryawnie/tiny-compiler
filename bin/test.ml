@@ -92,14 +92,29 @@ let parse_tests =
   let test_parse_declarations () =
     check decl "Same declaration"
       (FunDef ("f", ["x" ; "y"], BinOp (Add, Id "x", Id "y")))
-      (parse_decl @@ sexp_from_string "(def (f x y) (+ x y))")
+      (parse_decl @@ sexp_from_string "(def (f x y) (+ x y))") ;
+    check_raises "Should fail"
+      (Failure "Not a valid parameter name: (x y)")
+      (fun () -> ignore @@
+        parse_decl (sexp_from_string "(def (f (x y)) (+ x y))")) ;
+    check_raises "Should fail"
+      (Failure "Not a valid declaration: (def f (x) (+ x x))")
+      (fun () -> ignore @@
+        parse_decl (sexp_from_string "(def f (x) (+ x x))")) ;
   in
 
   let test_parse_program () =
     check prog "Same program"
       (Program ([FunDef ("f", ["x"], Id "x")], App ("f", [Num 1L])))
-      (parse_prog @@ sexp_list_from_string 
-        "(def (f x) x)\n(f 1)")
+      (parse_prog @@ sexp_list_from_string "(def (f x) x)\n(f 1)") ;
+    check_raises "Should fail. Declarations must precede program body."
+      (Failure "Not a valid function: def")
+      (fun () -> ignore @@
+        parse_prog (sexp_list_from_string "(f 1)\n(def (f x) x)")) ;
+    check_raises "Should fail. A program can't consist only of declarations"
+      (Failure "Not a valid function: def")
+      (fun () -> ignore @@
+        parse_prog (sexp_list_from_string "(def (f) 1)\n(def (g x) (+ x 1))"));
   in
 
   "parse", [
