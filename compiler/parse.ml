@@ -83,7 +83,6 @@ let parse_param (sexp : sexp) : string =
   match sexp with
   | `Atom id -> id
   | _ -> Fmt.failwith "Not a valid parameter name: %a" CCSexp.pp sexp
-
 let parse_decl (sexp : sexp) : decl = 
   match sexp with
   | `List [`Atom "def" ; `List (`Atom name :: params) ; body] ->

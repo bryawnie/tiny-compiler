@@ -232,16 +232,17 @@ let callee_epilogue = [
 let compile_declaration (d : decl) : instruction list =
   match d with 
   | FunDef (fname, params, body) ->
-    let env = make_function_env params empty_env in
+    let lenv = make_function_let_env params empty_env in
     [ILabel fname] @ callee_epilogue 
-    @ compile_expr body env @ callee_epilogue
+    @ compile_expr body (lenv, empty_fun_env) @ callee_epilogue @ [IRet]
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
       let declarations = List.concat @@ List.map compile_declaration decs in
-      let instrs = compile_expr exp empty_env in
+      let fenv = fun_env_from_decls decs empty_fun_env in
+      let instrs = compile_expr exp (empty_env, fenv) in
       let prelude ="
 section .text
 extern print
