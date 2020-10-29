@@ -10,7 +10,7 @@ let return_register = Reg RAX
 let argument_register = Reg R11
 let error_code_register = Reg RBX
 let error_register = Reg RCX
-let args_regs = [
+let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
 ]
 
@@ -201,11 +201,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     let curry_compile = fun expr -> compile_expr expr env in
     let arity = List.length args in
     let compiled_args = List.map curry_compile args in
-    let pushed_regs   = List.rev (push_regs arity args_regs) in
-    let prepare_args  = List.rev (prepare_call compiled_args args_regs) in 
+    let pushed_regs   = List.rev (push_regs arity arg_regs) in
+    let prepare_args  = List.rev (prepare_call compiled_args arg_regs) in 
     let prepare_call  = instLL_to_instL prepare_args in
     let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
-    let popped_regs   = pop_regs arity args_regs in
+    let popped_regs   = pop_regs arity arg_regs in
     pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
   | Void -> []
 
@@ -229,11 +229,30 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+let extend_env_args (params : string list) : env =
+  match List.length params with
+  | 0 -> empty_env
+  | 1 -> []
+  | 2 -> []
+  | 3 -> []
+  | 4 -> []
+  | 5 -> []
+  | 6 -> []
+  | n -> [] (*FIXME*)
+let compile_declaration (d : decl) : instruction list =
+  match d with 
+  | FunDef (fname, params, body) ->
+    let env = extend_env_args params in
+    [ILabel fname] @ callee_epilogue 
+    @ compile_expr body env @ callee_epilogue
+
 (* Generates the compiled program *)
-let compile_prog : expr Fmt.t =
-  fun fmt e ->
-  let instrs = compile_expr e empty_env in
-  let prelude ="
+let compile_prog : prog Fmt.t =
+  fun fmt p ->
+    match p with Program (decs, exp) ->
+      let declarations = List.concat @@ List.map compile_declaration decs in
+      let instrs = compile_expr exp empty_env in
+      let prelude ="
 section .text
 extern print
 extern min
@@ -241,14 +260,14 @@ extern min_of_8
 extern error
 global our_code_starts_here
 our_code_starts_here:" in
-  Fmt.pf fmt "%s@\n%a" prelude pp_instrs (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
-  @ instrs @ callee_epilogue @ [IRet] @ error_handler)
-
+  Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
+    (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+    @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
 
 (* The Pipeline *)
 let compile_src = 
   let open Parse in
-  Fmt.using (fun src -> parse (sexp_from_string src)) compile_prog
+  Fmt.using (fun src -> parse_prog (sexp_list_from_string src)) compile_prog
 
 (* let check_equal () =
   let lbl = gensym "boolean_first_op" in

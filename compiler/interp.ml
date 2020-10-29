@@ -99,3 +99,6 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
   | Void -> NumV 0L (* This is supposed to do nothing *)
+
+let interp_prog p : value = 
+  match p with Program (defs, exp) -> interp exp
