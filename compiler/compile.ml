@@ -18,6 +18,13 @@ let arg_regs = [
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
 
+(* FOREIGN FUNCTIONS *)
+let foreign_functions : fun_env = [
+  "print", 1;
+  "min", 2;
+  "min_of_8", 8;
+]
+
 (* 
   A gensym for standard symbols and specific instructions
   (Hope it provides a better understanding of generated asm) 
@@ -198,15 +205,23 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     end
   | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
   | App (fname, args) ->
-    let curry_compile = fun expr -> compile_expr expr env in
-    let arity = List.length args in
-    let compiled_args = List.map curry_compile args in
-    let pushed_regs   = List.rev (push_regs arity arg_regs) in
-    let prepare_args  = List.rev (prepare_call compiled_args arg_regs) in 
-    let prepare_call  = instLL_to_instL prepare_args in
-    let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
-    let popped_regs   = pop_regs arity arg_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
+    let arity = fun_lookup fname env in
+    let argc = List.length args in
+    if (argc != arity)
+      then Fmt.failwith 
+        "Arity mismatch: function f expects %d arguments but got %d" arity argc
+      else
+        let curry_compile = fun expr -> compile_expr expr env in
+        let arity = List.length args in
+        let compiled_args = List.map curry_compile args in
+        let pushed_regs   = List.rev (push_regs arity arg_regs) in
+        let prepare_args  = List.rev (prepare_call compiled_args arg_regs) in 
+        let prepare_call  = instLL_to_instL prepare_args in
+        let restore_rsp   = if arity > 6 
+          then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+          else [] in
+        let popped_regs   = pop_regs arity arg_regs in
+        pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
   | Void -> []
 
 
@@ -241,7 +256,7 @@ let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
       let declarations = List.concat @@ List.map compile_declaration decs in
-      let fenv = fun_env_from_decls decs empty_fun_env in
+      let fenv = fun_env_from_decls decs foreign_functions in
       let instrs = compile_expr exp (empty_env, fenv) in
       let prelude ="
 section .text

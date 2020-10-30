@@ -12,6 +12,11 @@ let memloc_to_arg (m: memloc) : arg =
   | MReg r -> Asm.Reg r
   | StackOffset n -> Asm.RegOffset (RBP, n)
 
+let pp_memloc fmt loc =
+  match loc with
+  | MReg r -> pp_arg fmt (Reg r)
+  | StackOffset n -> pp_arg fmt (RegOffset (RBP, n))
+
 (* 
   Environment as lists of pairs (i.e. association lists) 
   First field  -> Symbol
@@ -21,6 +26,16 @@ type let_env = (string * memloc) list
 (* An "fenv" contains function definitions*)
 type fun_env = (string * int) list
 type env = let_env * fun_env
+
+let pp_fun_env fmt lenv =
+  (Fmt.list (Fmt.pair Fmt.string Fmt.int)) fmt lenv 
+
+let pp_let_env fmt fenv =
+  (Fmt.list (Fmt.pair Fmt.string pp_memloc)) fmt fenv
+
+let pp_env fmt env =
+  match env with lenv, fenv ->
+    Fmt.pf fmt "variables=%a, functions=%a" pp_let_env lenv pp_fun_env fenv
 
 (* Alias for empty environment *)
 let empty_env : let_env = []
@@ -49,13 +64,13 @@ let get_next_slot (env: let_env) : memloc =
     end
 
 (* Extends the environment with a new id and its respective offset in stack *)
-let let_extend_env (name: string) (env: let_env) : (let_env * arg) =
+let extend_let_env (name: string) (env: let_env) : (let_env * arg) =
   let loc = get_next_slot env in
   ((name, loc)::env, memloc_to_arg loc)
 
 let extend_env (name: string) (env: env) : (env * arg) =
   match env with lenv, fenv ->
-  let new_lenv, arg = let_extend_env name lenv in
+  let new_lenv, arg = extend_let_env name lenv in
   ((new_lenv, fenv), arg)
 
 (* Returns the memory location for a function arguments. In the x64 calling
@@ -100,7 +115,7 @@ let fun_lookup (name: string) (env: env) : int =
 open Ast
 let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
   match ds with
-  | [] -> empty_fun_env
+  | [] -> fenv
   | d::tail -> 
     match d with FunDef (fname, params, _) ->
       fun_env_from_decls tail (extend_fun_env fname (List.length params) fenv)

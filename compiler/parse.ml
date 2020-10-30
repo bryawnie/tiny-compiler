@@ -69,7 +69,6 @@ let rec parse_expr (sexp : sexp) : expr =
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse_expr l, parse_expr r)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse_expr e, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> If (parse_expr c, parse_expr t, parse_expr f)
-  | `List [`Atom "print" ; e] -> App ("print", [parse_expr e])
   | `List (`Atom fname::args) -> 
     if List.mem fname notFuns
       then Fmt.failwith "Not a valid function: %s" fname else
