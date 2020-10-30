@@ -6,4 +6,4 @@ SRC:
 
 (f 1 2)
 EXPECTED:
-Duplicate parameter name in function f: x
+Duplicated parameter name in function f: x

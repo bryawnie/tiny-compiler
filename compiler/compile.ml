@@ -223,8 +223,22 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+let rec exist elem lst =
+  match lst with
+  | [] -> false
+  | hd::tl -> elem = hd || exist elem tl
+
+let rec dupExist lst: 'a =
+  match lst with
+  | [] -> ""
+  | hd::tl -> if (exist hd tl) then hd else dupExist tl
+
 let compile_declaration (d : decl) (fenv: fun_env) : instruction list * string =
   let (FunDef (fname, params, body)) = d in
+  let dup_arg = dupExist params in
+  if dup_arg != "" then
+    Fmt.failwith  "Duplicated parameter name in function %s: %s" fname dup_arg
+  else
   let lenv = make_function_let_env params empty_env in
   ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
   @ compile_expr body (lenv, foreign_functions @ fenv) @ callee_epilogue @ [IRet], fname)

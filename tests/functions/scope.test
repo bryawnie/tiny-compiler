@@ -7,4 +7,4 @@ SRC:
 
 (+ x 5)
 EXPECTED:
-Identifier a not found in environment
+Unbound identifier: c
