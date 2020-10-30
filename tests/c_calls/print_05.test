@@ -1,0 +1,9 @@
+NAME: Testing print (negatives)
+DESCRIPTION: printing negative numbers
+SRC:
+(print (+ (print 5) (print -3)))
+EXPECTED:
+> -3
+> 5
+> 2
+2

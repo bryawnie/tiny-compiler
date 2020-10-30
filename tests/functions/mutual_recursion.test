@@ -4,16 +4,11 @@ SRC:
 (def (pin n)
     (if (= n 0)
         0
-        (pon (print (- 1 n)))))
+        (pon (- 1 n))))
 (def (pon n)
     (if (= n 0)
         0
-        (pin (print (- -1 n)))))
-
+        (pin (- -1 n))))
 (pin 4)
 EXPECTED:
-> -3
-> 2
-> -1
-> 0
 0

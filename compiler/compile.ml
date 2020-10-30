@@ -203,6 +203,26 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
   | Void -> []
 
+let rec max_list (l: int list): int =
+  match l with
+  | [] -> 0
+  | h::tail -> max h (max_list tail)
+
+let rec varcount (e:expr): int =
+  match e with
+  | Num _ -> 0
+  | Bool _ -> 0
+  | Id _ -> 0
+  | UnOp (_, sub_ex) -> varcount sub_ex
+  | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
+  | Let (_, val_ex, body_ex) -> 1 + max (varcount val_ex) (varcount body_ex)
+  | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
+  | App (_, args_ex) -> max_list (List.map varcount args_ex)
+  | Void -> 0
+
+let stack_offset_for_local (exp: expr): int =
+  let vars = varcount exp in
+  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
 
 (* Label for handling errors *)
 let error_handler =
@@ -236,11 +256,12 @@ let rec dupExist lst: 'a =
 let compile_declaration (d : decl) (fenv: fun_env) : instruction list * string =
   let (FunDef (fname, params, body)) = d in
   let dup_arg = dupExist params in
+  let stack_offset = Int64.of_int (stack_offset_for_local body) in
   if dup_arg != "" then
     Fmt.failwith  "Duplicated parameter name in function %s: %s" fname dup_arg
   else
   let lenv = make_function_let_env params empty_env in
-  ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+  ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
   @ compile_expr body (lenv, foreign_functions @ fenv) @ callee_epilogue @ [IRet], fname)
 
 let rec compile_declarations ?(f_declared = []) (dl: decl list) (fenv: fun_env): instruction list =
@@ -255,6 +276,7 @@ let rec compile_declarations ?(f_declared = []) (dl: decl list) (fenv: fun_env):
 
 
 
+
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
@@ -262,6 +284,7 @@ let compile_prog : prog Fmt.t =
       let fenv = fun_env_from_decls decs foreign_functions in
       let declarations = compile_declarations decs fenv in
       let instrs = compile_expr exp (empty_env, fenv) in
+      let stack_offset = Int64.of_int (stack_offset_for_local exp) in
       let prelude ="
 section .text
 extern print
@@ -271,7 +294,7 @@ extern error
 global our_code_starts_here
 our_code_starts_here:" in
       Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
-        (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+        (callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
         @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
 
 (* The Pipeline *)
