@@ -245,11 +245,10 @@ let callee_epilogue = [
 ]
 
 let compile_declaration (d : decl) : instruction list =
-  match d with 
-  | FunDef (fname, params, body) ->
-    let lenv = make_function_let_env params empty_env in
-    [ILabel fname] @ callee_epilogue 
-    @ compile_expr body (lenv, empty_fun_env) @ callee_epilogue @ [IRet]
+  let (FunDef (fname, params, body)) = d in
+  let lenv = make_function_let_env params empty_env in
+  [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)]
+  @ compile_expr body (lenv, foreign_functions) @ callee_epilogue @ [IRet]
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
@@ -266,9 +265,9 @@ extern min_of_8
 extern error
 global our_code_starts_here
 our_code_starts_here:" in
-  Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
-    (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
-    @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
+      Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
+        (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+        @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
 
 (* The Pipeline *)
 let compile_src = 

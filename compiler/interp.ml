@@ -101,4 +101,4 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
   | Void -> NumV 0L (* This is supposed to do nothing *)
 
 let interp_prog p : value = 
-  match p with Program (defs, exp) -> interp exp
+  let (Program (_,exp)) = p in interp exp

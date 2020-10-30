@@ -81,7 +81,7 @@ let extend_env (name: string) (env: env) : (env * arg) =
   are "below" RBP, since this is how a function accesses the arguments it
   received from the caller. *)
 let get_next_arg_slot (env: let_env) : memloc =
-  let arg_regs = [MReg RDI; MReg RSI; MReg RDX; MReg RCX; MReg R8; MReg R9] in
+  let arg_regs = [MReg RSI; MReg RDI; MReg RDX; MReg RCX; MReg R8; MReg R9] in
   let n = List.length env in
   if n < 6 
     then List.nth arg_regs (n + 1) 
