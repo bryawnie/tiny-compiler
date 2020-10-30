@@ -223,29 +223,30 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
-let compile_declaration (d : decl) : instruction list * string =
+let compile_declaration (d : decl) (fenv: fun_env) : instruction list * string =
   let (FunDef (fname, params, body)) = d in
   let lenv = make_function_let_env params empty_env in
   ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
-  @ compile_expr body (lenv, foreign_functions) @ callee_epilogue @ [IRet], fname)
+  @ compile_expr body (lenv, foreign_functions @ fenv) @ callee_epilogue @ [IRet], fname)
 
-let rec compile_declarations ?(f_declared = []) (dl: decl list) : instruction list =
+let rec compile_declarations ?(f_declared = []) (dl: decl list) (fenv: fun_env): instruction list =
   match dl with
   | [] -> []
   | decl::rest -> 
-    let (compiled, name) = compile_declaration decl in 
+    let (compiled, name) = compile_declaration decl fenv in 
     if List.mem name f_declared then 
-      Fmt.failwith  "Duplicate function name: %s" name
+      Fmt.failwith  "Duplicated function name: %s" name
     else 
-      compiled  @ compile_declarations rest ~f_declared:(f_declared @ [name])
+      compiled  @ compile_declarations rest fenv ~f_declared:(f_declared @ [name])
+
 
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
-      let declarations = compile_declarations decs in
       let fenv = fun_env_from_decls decs foreign_functions in
+      let declarations = compile_declarations decs fenv in
       let instrs = compile_expr exp (empty_env, fenv) in
       let prelude ="
 section .text

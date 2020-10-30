@@ -50,7 +50,7 @@ void error(int errCode, val v) {
 
 val print(val v) {
   if (!(v & BOOL_BITMASK)) { // integer
-    printf("> %ld\n", v >> 1);
+    printf("> %ld\n", (int_v) v >> 1);
   } else if (v == BOOL_TRUE) {
     printf("> true\n");
   } else if (v == BOOL_FALSE) {
