@@ -134,27 +134,6 @@ let rec instLL_to_instL (ins: instruction list list) =
   | [] -> []
   | x::tail -> x @ instLL_to_instL tail
 
-(* let fun_asm_c (name: string) (args: arg list) (compile: expr -> env -> instruction list): instruction list =
-  let args_prepared = List.rev(prepare_args args args_regs) in
-  let arity = List.length args in
-  let args_in_stack = arity - 6 in
-  [ILabel (gensym name)] @
-  [IPush return_register ] @
-  args_prepared @
-  [ICall name]  @
-  if args_in_stack > 0 then [IAdd (Reg RSP, Const (Int64.of_int args_in_stack) )] else [] @
-  [IPop (return_register)] @
-  [ILabel (gensym ("end_"^name))]
-
-
-let call_print () : instruction list =
-  [ILabel (gensym "print")] @
-  [IPush (return_register)] @
-  [IMov (Reg RDI, return_register)] @
-  [ICall "print_value"] @
-  [IPop (return_register)] @
-  [ILabel (gensym "end_print")] *)
-
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
@@ -244,17 +223,28 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
-let compile_declaration (d : decl) : instruction list =
+let compile_declaration (d : decl) : instruction list * string =
   let (FunDef (fname, params, body)) = d in
   let lenv = make_function_let_env params empty_env in
-  [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)]
-  @ compile_expr body (lenv, foreign_functions) @ callee_epilogue @ [IRet]
+  ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+  @ compile_expr body (lenv, foreign_functions) @ callee_epilogue @ [IRet], fname)
+
+let rec compile_declarations ?(f_declared = []) (dl: decl list) : instruction list =
+  match dl with
+  | [] -> []
+  | decl::rest -> 
+    let (compiled, name) = compile_declaration decl in 
+    if List.mem name f_declared then 
+      Fmt.failwith  "Duplicate function name: %s" name
+    else 
+      compiled  @ compile_declarations rest ~f_declared:(f_declared @ [name])
+
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
-      let declarations = List.concat @@ List.map compile_declaration decs in
+      let declarations = compile_declarations decs in
       let fenv = fun_env_from_decls decs foreign_functions in
       let instrs = compile_expr exp (empty_env, fenv) in
       let prelude ="
