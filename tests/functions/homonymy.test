@@ -1,0 +1,10 @@
+NAME: homonym functions
+DESCRIPTION: two functions can't have the same name
+STATUS: CT error
+SRC:
+(def (f x) x)
+(def (f y) y)
+
+(f 3)
+EXPECTED:
+Duplicate function name: f

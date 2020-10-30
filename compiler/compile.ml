@@ -1,4 +1,4 @@
-open Expr
+open Ast
 open Asm
 open Env
 open Encode
@@ -10,10 +10,20 @@ let return_register = Reg RAX
 let argument_register = Reg R11
 let error_code_register = Reg RBX
 let error_register = Reg RCX
+let arg_regs = [
+  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+]
 
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
+
+(* FOREIGN FUNCTIONS *)
+let foreign_functions : fun_env = [
+  "print", 1;
+  "min", 2;
+  "min_of_8", 8;
+]
 
 (* 
   A gensym for standard symbols and specific instructions
@@ -53,10 +63,10 @@ into RAX (return_register), and the right one into R11 (argument_register).*)
 let compile_binop_preamble (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =
   let compiled_right = compiler r env in
-  let new_env, slot = extend_env (gensym "tmp") env in
+  let new_env, loc = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ 
-  compiled_left  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
+  compiled_right @ [ IMov (loc, return_register) ] @ 
+  compiled_left  @ [ IMov (argument_register, loc) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -96,10 +106,6 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
  
-let args_regs = [
-  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
-]
-
 let rec push_regs (n: int) (regs: arg list): instruction list =
   if n>0 then
     begin match regs with
@@ -163,11 +169,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
     end
-  | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
+  | Id x  -> [ IMov (return_register, lookup x env) ]
   | Let (id,v,b) -> 
-      let (new_env, slot) = extend_env id env in
+      let (new_env, loc) = extend_env id env in
       let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(RegOffset (RBP, slot), return_register) ] in
+      let save_val     = [ IMov(loc, return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op, l, r) ->
     begin
@@ -199,15 +205,24 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     end
   | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
   | App (fname, args) ->
-    let curry_compile = fun expr -> compile_expr expr env in
-    let arity = List.length args in
-    let compiled_args = List.map curry_compile args in
-    let pushed_regs   = List.rev (push_regs arity args_regs) in
-    let prepare_args  = List.rev (prepare_call compiled_args args_regs) in 
-    let prepare_call  = instLL_to_instL prepare_args in
-    let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
-    let popped_regs   = pop_regs arity args_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
+    let arity = fun_lookup fname env in
+    let argc = List.length args in
+    if (argc != arity)
+      then Fmt.failwith 
+        "Arity mismatch: function f expects %d arguments but got %d" arity argc
+      else
+        let curry_compile = fun expr -> compile_expr expr env in
+        let arity = List.length args in
+        let compiled_args = List.map curry_compile args in
+        let pushed_regs   = List.rev (push_regs arity arg_regs) in
+        let prepare_args  = List.rev (prepare_call compiled_args arg_regs) in 
+        let prepare_call  = instLL_to_instL prepare_args in
+        let restore_rsp   = if arity > 6 
+          then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+          else [] in
+        let popped_regs   = pop_regs arity arg_regs in
+        pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
+  | Void -> []
 
 
 (* Label for handling errors *)
@@ -229,11 +244,21 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+let compile_declaration (d : decl) : instruction list =
+  match d with 
+  | FunDef (fname, params, body) ->
+    let lenv = make_function_let_env params empty_env in
+    [ILabel fname] @ callee_epilogue 
+    @ compile_expr body (lenv, empty_fun_env) @ callee_epilogue @ [IRet]
+
 (* Generates the compiled program *)
-let compile_prog : expr Fmt.t =
-  fun fmt e ->
-  let instrs = compile_expr e empty_env in
-  let prelude ="
+let compile_prog : prog Fmt.t =
+  fun fmt p ->
+    match p with Program (decs, exp) ->
+      let declarations = List.concat @@ List.map compile_declaration decs in
+      let fenv = fun_env_from_decls decs foreign_functions in
+      let instrs = compile_expr exp (empty_env, fenv) in
+      let prelude ="
 section .text
 extern print
 extern min
@@ -241,14 +266,14 @@ extern min_of_8
 extern error
 global our_code_starts_here
 our_code_starts_here:" in
-  Fmt.pf fmt "%s@\n%a" prelude pp_instrs (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
-  @ instrs @ callee_epilogue @ [IRet] @ error_handler)
-
+  Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
+    (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
+    @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
 
 (* The Pipeline *)
 let compile_src = 
   let open Parse in
-  Fmt.using (fun src -> parse (sexp_from_string src)) compile_prog
+  Fmt.using (fun src -> parse_prog (sexp_list_from_string src)) compile_prog
 
 (* let check_equal () =
   let lbl = gensym "boolean_first_op" in
