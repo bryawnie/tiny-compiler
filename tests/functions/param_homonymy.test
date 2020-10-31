@@ -1,0 +1,9 @@
+NAME: homonym parameters
+DESCRIPTION: a function's parameters must have different names
+STATUS: CT error
+SRC:
+(def (f x x) (+ x x))
+
+(f 1 2)
+EXPECTED:
+Duplicated parameter name in function f: x

@@ -1,7 +1,8 @@
 NAME: Testing min
 DESCRIPTION: tests functions with 2 arguments
+STATUS: RT error
 SRC:
 (defsys min int int -> int)
-(@sys min 1 2)
+(@sys min true 2)
 EXPECTED:
-1
+Expected number, but got true

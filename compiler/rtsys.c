@@ -20,9 +20,6 @@ const val BOOL_FALSE = 0x0000000000000001;
 const int ERR_NOT_NUMBER = 1;
 const int ERR_NOT_BOOLEAN = 2;
 
-
-/* DEFAULT FOREIGN FUNCTIONS */
-
 char * value_to_str(val v){
   char * strOut = (char *) malloc(21*sizeof(char));
   if (!(v & BOOL_BITMASK)) { // integer
@@ -49,9 +46,11 @@ void error(int errCode, val v) {
   exit(errCode);
 }
 
+/* DEFAULT FOREIGN FUNCTIONS */
+
 val print(val v) {
   if (!(v & BOOL_BITMASK)) { // integer
-    printf("> %ld\n", v >> 1);
+    printf("> %ld\n", (int_v) v >> 1);
   } else if (v == BOOL_TRUE) {
     printf("> true\n");
   } else if (v == BOOL_FALSE) {
@@ -61,7 +60,6 @@ val print(val v) {
   }
   return v;
 }
-
 
 /* USER DEFINED FOREIGN FUNCTIONS */
 

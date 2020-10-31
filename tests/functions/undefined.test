@@ -1,0 +1,6 @@
+NAME: undefined function
+STATUS: CT error
+SRC:
+(f 1)
+EXPECTED:
+Undefined function: f

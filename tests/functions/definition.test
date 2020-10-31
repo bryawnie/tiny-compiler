@@ -1,0 +1,5 @@
+NAME: defining and using a function
+SRC:
+(def (double x) (+ x x))
+(double 1)
+EXPECTED: 2

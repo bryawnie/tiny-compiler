@@ -1,22 +1,25 @@
 (* registers *)
 type reg = 
-| RAX   (* Main Register *)
-| RBX
-| RCX   (* 4th Param *)
-| RDX   (* 3rd Param *)
-| RSI   (* 1st Param *)
-| RDI   (* 2nd Param *)
-| RSP   (* Stack Pointer *)
-| RBP   (* Base Pointer *)
-| R8    (* 5th Param *)
-| R9    (* 6th Param *)
-| R10
-| R11   (* Temp Register *)
+(*            USAGE       | SAVING REGIME 
+        ------------------+-------------- *)
+| RAX   (* scratch/return |   R *)
+| RBX   (*                |   E *)
+| RCX   (* 4th Param      |   R *)
+| RDX   (* 3rd Param      |   R *)
+| RSI   (* 1st Param      |   R *)
+| RDI   (* 2nd Param      |   R *)
+| RSP   (* Stack Pointer  |   R *)
+| RBP   (* Base Pointer   |   E *)
+| R8    (* 5th Param      |   R *)
+| R9    (* 6th Param      |   R *)
+| R10   (*                |   R *)
+| R11   (* Temp Register  |   R *)
 (* 
 | R12
 | R13
 | R14
 | R15 *)
+(* R = caller-save ; E = callee-save *)
 
 
 (* arguments for instructions *)
@@ -51,6 +54,7 @@ type instruction =
 | IPush of arg        (* Pushes an argument into the stack *)
 | IPop of arg         (* Pop a value from stack *)
 | IRet                (* Return *)
+| IExtern of string   (* Declaration of an external label*)
 
 
 (* A pretty printing for registers *)
@@ -106,7 +110,8 @@ let pp_instr : instruction Fmt.t =
   | IAnd (a1, a2) -> Fmt.pf fmt "  and  %a, %a" pp_arg a1 pp_arg a2
   | IXor (a1, a2) -> Fmt.pf fmt "  xor  %a, %a" pp_arg a1 pp_arg a2
   | IPush x       -> Fmt.pf fmt "  push %a" pp_arg x
-  | IPop x       ->  Fmt.pf fmt "  pop  %a" pp_arg x
+  | IPop x        -> Fmt.pf fmt "  pop  %a" pp_arg x
+  | IExtern lbl   -> Fmt.pf fmt "extern %s" lbl
 
 
 (* A pretty printing for instruction list *)

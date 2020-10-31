@@ -10,13 +10,20 @@ let return_register = Reg RAX
 let argument_register = Reg R11
 let error_code_register = Reg RBX
 let error_register = Reg RCX
-let args_regs = [
+let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
 ]
 
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
+
+(* FOREIGN FUNCTIONS *)
+let built_in_foreign_functions : fun_env = [
+  "print", 1;
+  "min", 2;
+  "min_of_8", 8;
+]
 
 (* 
   A gensym for standard symbols and specific instructions
@@ -46,6 +53,12 @@ let check_arg (register: arg) (type_error: arg) : instruction list =
   [ITest (error_register, Const 1L)] @
   if type_error == not_a_number then
   [IJnz "error_handler"] else [IJz "error_handler"]
+
+let type_checking (register: arg) (type_expected: dtype): instruction list =
+  match type_expected with
+  | IntT -> check_arg register not_a_number
+  | BoolT -> check_arg register not_a_boolean
+  | AnyT -> [] 
   
 (* Shortcut typechecker for binary operations *)
 let check_binops (type_error: arg) =
@@ -56,10 +69,10 @@ into RAX (return_register), and the right one into R11 (argument_register).*)
 let compile_binop_preamble (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =
   let compiled_right = compiler r env in
-  let new_env, slot = extend_env (gensym "tmp") env in
+  let new_env, loc = extend_env (gensym "tmp") env in
   let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (RegOffset (RBP, slot), return_register) ] @ 
-  compiled_left  @ [ IMov (argument_register, RegOffset (RBP, slot)) ]
+  compiled_right @ [ IMov (loc, return_register) ] @ 
+  compiled_left  @ [ IMov (argument_register, loc) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -115,38 +128,16 @@ let rec pop_regs (n: int) (regs: arg list): instruction list =
     end
   else []
 
-let rec prepare_call (ins: instruction list list) (regs: arg list): instruction list list =
+let rec prepare_call ?(types= []) (ins: instruction list list) (regs: arg list) (check: bool) : instruction list list =
   match ins, regs with
   | [], _ -> []
-  | i::tail_args, reg::tail_regs -> [i @ [IMov (reg, return_register)] ] @ prepare_call tail_args tail_regs
-  | i::tail_args, [] -> [ i @ [IPush return_register]] @ prepare_call tail_args []
+  | ins::tail_args, reg::tail_regs -> 
+    [ins @ (if check then type_checking return_register (List.hd types) else []) @ [IMov (reg, return_register)] ] 
+    @ prepare_call tail_args tail_regs check ~types:(if check then (List.tl types) else types)
+  | ins::tail_args, [] -> 
+    [ ins @ (if check then type_checking return_register (List.hd types) else []) @ [IPush return_register]] 
+    @ prepare_call tail_args [] check ~types:(if check then (List.tl types) else types)
 
-
-let rec instLL_to_instL (ins: instruction list list) =
-  match ins with
-  | [] -> []
-  | x::tail -> x @ instLL_to_instL tail
-
-(* let fun_asm_c (name: string) (args: arg list) (compile: expr -> env -> instruction list): instruction list =
-  let args_prepared = List.rev(prepare_args args args_regs) in
-  let arity = List.length args in
-  let args_in_stack = arity - 6 in
-  [ILabel (gensym name)] @
-  [IPush return_register ] @
-  args_prepared @
-  [ICall name]  @
-  if args_in_stack > 0 then [IAdd (Reg RSP, Const (Int64.of_int args_in_stack) )] else [] @
-  [IPop (return_register)] @
-  [ILabel (gensym ("end_"^name))]
-
-
-let call_print () : instruction list =
-  [ILabel (gensym "print")] @
-  [IPush (return_register)] @
-  [IMov (Reg RDI, return_register)] @
-  [ICall "print_value"] @
-  [IPop (return_register)] @
-  [ILabel (gensym "end_print")] *)
 
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
@@ -162,11 +153,11 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
     end
-  | Id x  -> [ IMov (return_register, RegOffset (RBP, lookup x env)) ]
+  | Id x  -> [ IMov (return_register, let_lookup x env) ]
   | Let (id,v,b) -> 
-      let (new_env, slot) = extend_env id env in
+      let (new_env, loc) = extend_env id env in
       let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(RegOffset (RBP, slot), return_register) ] in
+      let save_val     = [ IMov(loc, return_register) ] in
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op, l, r) ->
     begin
@@ -196,19 +187,75 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | And -> compile_shortcut_binop l r env (gensym "and") false compile_expr
       | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
     end
-  | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
+  | If (c, t, f) -> (compile_expr c env) 
+    @ check_arg return_register not_a_boolean 
+    @ compile_if compile_expr t f env
+  | Sys (fname, args) ->
+    let params, type_return = sys_lookup fname env in
+    let arity = List.length params in
+    let argc = List.length args in
+    if (argc != arity) 
+      then Fmt.failwith 
+      "Arity mismatch: system function %s expects %d arguments but got %d"
+      fname arity argc
+    else 
+      (* type check *)
+      let compiled_args = List.map (fun e -> compile_expr e env) args in 
+      let pushed_regs   = List.rev (push_regs arity arg_regs) in
+      let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
+      let restore_rsp   = if arity > 6 
+        then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+        else [] in
+      let popped_regs   = pop_regs arity arg_regs in
+      pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs @ type_checking return_register type_return
+      (* Compile foreign function call here *)
   | App (fname, args) ->
-    let curry_compile = fun expr -> compile_expr expr env in
-    let arity = List.length args in
-    let compiled_args = List.map curry_compile args in
-    let pushed_regs   = List.rev (push_regs arity args_regs) in
-    let prepare_args  = List.rev (prepare_call compiled_args args_regs) in 
-    let prepare_call  = instLL_to_instL prepare_args in
-    let restore_rsp   = if arity > 6 then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))] else [] in
-    let popped_regs   = pop_regs arity args_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
+    let arity = fun_lookup fname env in
+    let argc = List.length args in
+    if (argc != arity)
+      then Fmt.failwith 
+        "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
+      else
+        let curry_compile = fun expr -> compile_expr expr env in
+        let compiled_args = List.map curry_compile args in
+        let pushed_regs   = List.rev (push_regs arity arg_regs) in
+        let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs false)) in 
+        let restore_rsp   = if arity > 6 
+          then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+          else [] in
+        let popped_regs   = pop_regs arity arg_regs in
+        pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
   | Void -> []
 
+
+(* The maximum integer in a int list *)
+let rec max_list (l: int list): int =
+  match l with
+  | [] -> 0
+  | h::tail -> max h (max_list tail)
+
+
+(* Counts the max number of vars defined at the same time *)
+let rec varcount (e:expr): int =
+  match e with
+  | Num _ -> 0
+  | Bool _ -> 0
+  | Id _ -> 0
+  | UnOp (_, sub_ex) -> varcount sub_ex
+  | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
+  | Let (_, val_ex, body_ex) -> 1 + max (varcount val_ex) (varcount body_ex)
+  | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
+  | App (_, args_ex) -> max_list (List.map varcount args_ex)
+  | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
+  | Void -> 0
+
+(* 
+  Gets the necesary space to save local vars 
+  Uses a sound overaproximate.
+*)
+let stack_offset_for_local (exp: expr): int =
+  let vars = varcount exp in
+  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
 
 (* Label for handling errors *)
 let error_handler =
@@ -229,34 +276,68 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
-(* Generates the compiled program *)
-let compile_prog : expr Fmt.t =
-  fun fmt e ->
-  let instrs = compile_expr e empty_env in
-  let prelude ="
-section .text
-extern print
-extern min
-extern min_of_8
-extern error
-global our_code_starts_here
-our_code_starts_here:" in
-  Fmt.pf fmt "%s@\n%a" prelude pp_instrs (callee_prologue @ [ISub (Reg RSP, Const 160L)] (* Change this *)
-  @ instrs @ callee_epilogue @ [IRet] @ error_handler)
+(* Checks if an element exists in a list *)
+let rec exist elem lst =
+  match lst with
+  | [] -> false
+  | hd::tl -> elem = hd || exist elem tl
 
+(* Finds duplicated in a string list *)
+let rec dupExist lst: 'a =
+  match lst with
+  | [] -> ""
+  | hd::tl -> if (exist hd tl) then hd else dupExist tl
+
+let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
+  instruction list =
+  let _, fenv, senv = env in
+  let dup_arg = dupExist params in
+  if dup_arg != "" 
+    then Fmt.failwith "Duplicated parameter name in function %s: %s"
+      fname dup_arg
+  else
+    let lenv = let_env_from_params params empty_env in
+    let stack_offset = Int64.of_int (stack_offset_for_local body) in
+    [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
+    @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
+
+let compile_declaration (dec: decl) (env: env) 
+(funs: instruction list) (exts: instruction list): instruction list * instruction list =
+  match dec with 
+  | FunDef (fname, params, body) -> 
+    compile_def fname params body env @ funs , exts
+  | SysFunDef (fname, _, _) -> funs, [IExtern fname] @ exts
+
+let rec compile_declarations (decls: decl list) (env: env) :
+instruction list * instruction list =
+  match decls with
+  | [] -> [], []
+  | dec::tail ->
+    let funs, exts = compile_declarations tail env in
+    compile_declaration dec env funs exts
+
+(* Generates the compiled program *)
+let compile_prog : prog Fmt.t =
+  fun fmt p ->
+    match p with Program (decs, exp) ->
+      let fenv = fun_env_from_decls decs empty_fun_env in
+      let senv = sys_env_from_decls decs empty_sys_env in
+      let env  = empty_env, fenv, senv in
+      let functions, externs = compile_declarations decs env in
+      let instrs = compile_expr exp env in
+      let stack_offset = Int64.of_int (stack_offset_for_local exp) in
+      Fmt.pf fmt 
+"section .text
+extern error
+%a
+global our_code_starts_here
+our_code_starts_here:
+%a" 
+      pp_instrs externs pp_instrs (callee_prologue 
+      @ [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
+      @ error_handler @ functions)
 
 (* The Pipeline *)
 let compile_src = 
   let open Parse in
-  Fmt.using (fun src -> parse (sexp_from_string src)) compile_prog
-
-(* let check_equal () =
-  let lbl = gensym "boolean_first_op" in
-  let done_lbl = gensym "done_type_checking" in
-  [ITest (return_register, Const 1L)] @
-  [IJnz lbl] @
-  check_arg argument_register not_a_number @
-  [IJmp done_lbl] @
-  [ILabel lbl] @
-  check_arg argument_register not_a_boolean @
-  [ILabel done_lbl] *)
+  Fmt.using (fun src -> parse_prog (sexp_list_from_string src)) compile_prog
