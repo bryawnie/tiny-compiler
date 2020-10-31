@@ -42,15 +42,22 @@ type expr =
   | Let of string * expr * expr
   | If of expr * expr * expr
   (* | FunApp of string * expr list (* function application *) *)
-  | App of string * expr list (* foreign function application *)
+  | App of string * expr list (* function application *)
+  | Sys of string * expr list (* foreign function application *)
   | Void
+
+(* data type *)
+type dtype =
+  | IntT
+  | BoolT
+  | AnyT
 
 type decl =
   | FunDef of string * string list * expr (* function definition *)
+  | SysFunDef of string * dtype list * dtype(* foreign function definition *)
 
 type prog =
   | Program of decl list * expr
-
 
 open Fmt
 
@@ -91,6 +98,7 @@ let rec pp_expr fmt =
   | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
   | If (c, t, f) -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
   | App (fname, exprs) -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs
+  | Sys (fname, exprs) -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
   | Void -> pf fmt "<void>"
   (*
   | FunDef (fname, params, body) ->
@@ -99,10 +107,18 @@ let rec pp_expr fmt =
     pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) args
   *)
 
+let pp_dtype fmt =
+  function
+  | IntT -> pf fmt "int"
+  | BoolT -> pf fmt "bool"
+  | AnyT -> pf fmt  "any"
+
 let pp_decl fmt =
   function
   | FunDef (name, params, body) ->
     pf fmt "(def (%s %s) %a)" name (String.concat " " params) pp_expr body
+  | SysFunDef (name, params, ret) ->
+    pf fmt "(defsys %s %a -> %a)" name (list ~sep:sp pp_dtype) params pp_dtype ret
 
 let rec pp_decl_list fmt =
   function

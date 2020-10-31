@@ -1,6 +1,7 @@
 NAME: Testing min
 DESCRIPTION: tests functions with 2 arguments
 SRC:
-(min 1 2)
+(defsys min int int -> int)
+(@sys min 1 2)
 EXPECTED:
 1
