@@ -293,6 +293,14 @@ let interp_tests =
       (NumV 6L);
   in
 
+  let test_interp_prog () =
+    check value 
+    "(def (double x) (+ x x))
+    (double 1)"
+      (interp_prog (Program ([(FunDef ("double", ["x"], (BinOp (Add, (Id "x"), (Id "x")))))], (App ("double", [(Num 1L)])))))
+      (NumV 2L)
+  in
+
 
   "interp", [
     (* Use the `Slow parameter for tests that only need to be run with the full test suite
@@ -309,6 +317,7 @@ let interp_tests =
     test_case "Integer BinOps" `Slow test_interp_binop;
     test_case "If sentences" `Slow test_interp_if;
     test_case "Let-bindings" `Slow test_interp_let;
+    test_case "Prog" `Slow test_interp_prog;
   ]
 
 let interpreter (src : string) : string =
