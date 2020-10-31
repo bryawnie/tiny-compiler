@@ -8,11 +8,11 @@ Para la entrega 2, se esperaba implementar las siguientes especificaciones bási
 
 - [x] [Gestión de errores de tipos](#gestión-de-errores-de-tipo-type-checking)
 - [x] [Añadir funciones externas (FFI)](#funciones-externas)
-- [x] [Compilar funciones de primer orden](#TODO)
+- [x] [Compilar funciones de primer orden](#funciones-propias)
 
 Mientres que dentro de los objetivos extra, existían 2 opciones, donde se escogió la segunda:
 - [ ] [Gestión de errores de recursos]
-- [x] [Convención de llamada a funciones x86-64](#TODO)
+- [x] [Convención de llamada a funciones x86-64](#foreign-interfaces)
 
  A continuación se detalla la implementación de cada una de las especificaciones nombradas.
 
@@ -107,20 +107,11 @@ Es importante tener en cuenta la aridad de la función definida, ya que si no se
 
 Con esto ya está todo listo para llamar a la funcion con ``call``. Sin embargo después de ello, es necesario restaurar el **RSP**, por lo que se le suma el espacio que fue desplazado (de haber sido necesario) al hacer ``push`` de los argumentos. Finalmente se restauran los registros utilizados durante el paso de parámetros en la llamada.
 
+### Funciones Propias
 
+### Foreign Interfaces
 
 ## Tests
-Se implementan tests al pipeline completo en archivos ``*.test``. Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
+Los tests fueron expandidos para testear a mayor profundidad las características implementadas dentro del compilador. 
 
-Un ejemplo de test que utiliza todas las features implementadas en esta entrega se encuentra en ``fulltest_e1.test``, el cual prueba el funcionamiento del programa:
-
-```Scheme
-(let (x 5)
-    (let (y (add1 (sub1 x)))
-        (let (x (if (< y 5) (* x 8) (* x 12)))
-            (if (and (= x 60) (and (= y 5) (not false)))
-                (let (z (sub1 (/ x 4)))
-                    (/ (* -4 (- z 19)) 2))
-                false))))
-```
-Que entrega como resultado 10.
+Los tests al pipeline completo se encuentran en archivos ``*.test``, separados en subcarpetas según la funcionalidad que intentan evaluar. Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
