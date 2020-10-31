@@ -55,6 +55,7 @@ type instruction =
 | IPop of arg         (* Pop a value from stack *)
 | IRet                (* Return *)
 | IExtern of string   (* Declaration of an external label*)
+| IEmpty              (* An empty line, for formatting purposes*)
 
 
 (* A pretty printing for registers *)
@@ -112,6 +113,7 @@ let pp_instr : instruction Fmt.t =
   | IPush x       -> Fmt.pf fmt "  push %a" pp_arg x
   | IPop x        -> Fmt.pf fmt "  pop  %a" pp_arg x
   | IExtern lbl   -> Fmt.pf fmt "extern %s" lbl
+  | IEmpty        -> Fmt.pf fmt ""
 
 
 (* A pretty printing for instruction list *)

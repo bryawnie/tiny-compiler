@@ -76,7 +76,7 @@ let fun_lookup (name: string) (env: env) : int =
 
 (* looks up a system (foreign) function in an env. Returns its parameter
 and return types; fails with and "Undefined system function" error if not.*)
-let rec sys_lookup (name: string) (env: env) : (dtype list * dtype) =
+let sys_lookup (name: string) (env: env) : (dtype list * dtype) =
   match env with _ , _, senv ->
     if List.mem_assoc name senv then List.assoc name senv 
     else Fmt.failwith "Undefined system function: %s" name
@@ -142,14 +142,14 @@ let rec existsInEnv elem lst =
 (* Extends a fun_env with a new function *)
 let extend_fun_env (fname: string) (arity: int) (fenv: fun_env) : fun_env =
   if existsInEnv fname fenv then
-    Fmt.failwith "Duplicated function name: %s" fname
+    Fmt.failwith "Duplicate function name: %s" fname
   else (fname, arity)::fenv
 
 (* Extends a sys_env with a new function *)
 let extend_sys_env (fname: string) (params: dtype list) (return_type: dtype)
   (senv: sys_env) : sys_env = 
   if existsInEnv fname senv then
-    Fmt.failwith "Duplicated system function name: %s" fname
+    Fmt.failwith "Duplicate system function name: %s" fname
   else (fname, (params, return_type))::senv
 
 

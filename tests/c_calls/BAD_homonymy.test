@@ -1,0 +1,11 @@
+NAME: homonym foreign functions
+DESCRIPTION: two foreign functions can't have the same name
+STATUS: CT error
+SRC:
+(defsys foo any -> any)
+(defsys foo int -> bool)
+
+(foo 1)
+
+EXPECTED:
+Duplicate system function name: foo
