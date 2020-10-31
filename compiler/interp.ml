@@ -60,21 +60,28 @@ let liftEqV : value -> value -> value =
 
 open Ast
 
+type lenv = (string * value) list
+type fenv = (string * (string list * expr)) list
+
 (** Interpreter Environment **)
-type ienv = (string * value) list
+type ienv = lenv * fenv
 
-let mt_ienv : ienv = []
-  
-let extend_ienv : string -> value -> ienv -> ienv =
-    fun x v ienv -> (x, v) :: ienv
+let mt_ienv : ienv = [], []
+let mt_lenv : lenv = []
+let mt_fenv : fenv = []
 
-let rec multi_extend_ienv (vars: string list) (vals: value list) (env: ienv) : ienv =
+let extend_lenv (id: string) (v: value) (env: ienv): ienv =
+  let lenv, fenv = env in (id, v)::lenv, fenv
+
+let extend_fenv (id: string) (params: string list) (body: expr) (env: ienv) : ienv =
+  let lenv, fenv = env in lenv, (id, (params, body))::fenv
+let rec multi_extend_lenv (vars: string list) (vals: value list) (env: ienv) 
+: ienv =
   match vars, vals with
   | [], [] -> env
   | var::tail_vars, value::tail_vals -> 
-    let new_env = multi_extend_ienv tail_vars tail_vals env in
-    (var, value) :: new_env
-  | _, _ -> Fmt.failwith "Error: Arity missmatch"
+    extend_lenv var value (multi_extend_lenv tail_vars tail_vals env)
+  | _, _ -> Fmt.failwith "Error: Arity mismatch"
   
 
 let rec lookup_decl (name: string) (decls: decl list): string * string list * expr =
@@ -85,17 +92,33 @@ let rec lookup_decl (name: string) (decls: decl list): string * string list * ex
     | FunDef (fname, args, body) -> if fname = name then (fname, args, body) else lookup_decl name tail_decls
     | _ -> Fmt.failwith "Error: System functions not supported in Interpreter."
 
+let let_lookup (id: string) (env: ienv) : value =
+  let lenv, _ = env in
+  if List.mem_assoc id lenv
+    then List.assoc id lenv
+  else
+    Fmt.failwith "Unbound identifier: %s" id
+
+let fun_lookup (id: string) (env: ienv) : string list * expr =
+  let _, fenv = env in
+  if List.mem_assoc id fenv
+    then List.assoc id fenv 
+  else
+    Fmt.failwith "Undefined function name: %s" id
+
+
 (** Interpreter **)
-let rec interp ?(env=mt_ienv) ?(decls=[])(e : expr) : value =
+let rec interp ?(env=mt_ienv) (e : expr) : value =
   match e with 
   | Num n -> NumV n
   | Bool p -> BoolV p
-  | Id x -> List.assoc x env
+  | Id x -> let_lookup x env
   | App (fname, args) -> 
     let val_args = List.map (fun exp -> (interp ~env:env exp)) args in 
-    let (_, args, body) = lookup_decl fname decls in
-    let f_env = multi_extend_ienv args val_args mt_ienv in
-    interp ~env:f_env ~decls:decls body
+    let params, body = fun_lookup fname env in
+    let _, fenv = env in 
+    let new_env = multi_extend_lenv params val_args (mt_lenv, fenv) in
+    interp ~env:new_env body
   | UnOp (op, e) ->
       begin match op with
       | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)
@@ -106,7 +129,7 @@ let rec interp ?(env=mt_ienv) ?(decls=[])(e : expr) : value =
         | _ -> Fmt.failwith "Error: Non boolean expr in Not sentence"
         end
       end
-  | Let (id, v, b) -> interp ~env:(extend_ienv id (interp ~env:env v) env) b
+  | Let (id, v, b) -> interp ~env:(extend_lenv id (interp ~env:env v) env) b
   | BinOp (op,l,r) -> 
       begin match op with 
       | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
@@ -118,9 +141,27 @@ let rec interp ?(env=mt_ienv) ?(decls=[])(e : expr) : value =
       | Or -> BoolV (unpackBoolV (interp ~env:env l) || unpackBoolV (interp ~env:env r))
       | And -> BoolV (unpackBoolV (interp ~env:env l) && unpackBoolV (interp ~env:env r))
       end
-  | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
+  | If (c, t, f) ->
+    begin
+    match interp ~env:env c with
+    | BoolV cond -> if cond then interp ~env:env t else interp ~env:env f
+    | _ -> Fmt.failwith "Error: Non boolean condition in If sentence"
+    end
   | Void -> NumV 0L (* This is supposed to do nothing *)
   | Sys (_,_) -> Fmt.failwith "Error: System functions not supported in Interpreter."
 
+let rec fenv_from_decls (ds: decl list) (fenv: fenv): fenv =
+  match ds with
+  | [] -> fenv
+  | FunDef(fname, params, body)::tail ->
+    if List.mem_assoc fname fenv
+      then Fmt.failwith "Duplicate function name: %s" fname
+    else
+      fenv_from_decls tail @@ (fname, (params, body))::fenv
+  | SysFunDef (_, _, _):: _ ->
+    Fmt.failwith "Interpreter does not support foreign functions (defsys)."
+
 let interp_prog p : value = 
-  let (Program (decl,exp)) = p in interp exp ~decls:decl
+  let (Program (decls, exp)) = p in
+  let fenv = fenv_from_decls decls mt_fenv in
+   interp exp ~env: (mt_lenv, fenv)
