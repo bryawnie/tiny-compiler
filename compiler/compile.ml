@@ -18,13 +18,6 @@ let arg_regs = [
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
 
-(* FOREIGN FUNCTIONS *)
-let built_in_foreign_functions : fun_env = [
-  "print", 1;
-  "min", 2;
-  "min_of_8", 8;
-]
-
 (* 
   A gensym for standard symbols and specific instructions
   (Hope it provides a better understanding of generated asm) 
@@ -45,6 +38,11 @@ let gensym  =
     Format.sprintf "less_%d" !less_counter )
     | _ -> (counter := !counter + 1;
       Format.sprintf "%s_%d" basename !counter))
+
+
+let create_gensym s = 
+  let r = ref 0 in 
+  (fun () -> incr r; s ^ "_" ^ string_of_int !r)  
 
 (* Type Checker for a register and a type expected *)
 let check_arg (register: arg) (type_error: arg) : instruction list =
@@ -146,9 +144,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Bool p -> [ IMov (return_register, Const (encode_bool p)) ]
   | UnOp (op, e) ->
     begin match op with
-      | Add1 -> compile_expr e env @ check_arg return_register not_a_number @ [IAdd (return_register, Const 2L)]
-      | Sub1 -> compile_expr e env @ check_arg return_register not_a_number @ [ISub (return_register, Const 2L)]
-      | Not ->  compile_expr e env @ check_arg return_register not_a_boolean @ [IMov (argument_register, Const bool_bit) ;
+      | Add1 -> compile_expr e env @ type_checking return_register IntT @ [IAdd (return_register, Const 2L)]
+      | Sub1 -> compile_expr e env @ type_checking return_register IntT @ [ISub (return_register, Const 2L)]
+      | Not ->  compile_expr e env @ type_checking return_register BoolT @ [IMov (argument_register, Const bool_bit) ;
         IXor (return_register, argument_register)]
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
