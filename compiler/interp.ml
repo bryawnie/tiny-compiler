@@ -68,13 +68,34 @@ let mt_ienv : ienv = []
 let extend_ienv : string -> value -> ienv -> ienv =
     fun x v ienv -> (x, v) :: ienv
 
+let rec multi_extend_ienv (vars: string list) (vals: value list) (env: ienv) : ienv =
+  match vars, vals with
+  | [], [] -> env
+  | var::tail_vars, value::tail_vals -> 
+    let new_env = multi_extend_ienv tail_vars tail_vals env in
+    (var, value) :: new_env
+  | _, _ -> Fmt.failwith "Error: Arity missmatch"
+  
+
+let rec lookup_decl (name: string) (decls: decl list): string * string list * expr =
+  match decls with 
+  | [] -> Fmt.failwith "Error: Function %s not found" name
+  | dec::tail_decls -> 
+    match dec with
+    | FunDef (fname, args, body) -> if fname = name then (fname, args, body) else lookup_decl name tail_decls
+    | _ -> Fmt.failwith "Error: System functions not supported in Interpreter."
+
 (** Interpreter **)
-let rec interp ?(env=mt_ienv) (e : expr)  : value =
+let rec interp ?(env=mt_ienv) ?(decls=[])(e : expr) : value =
   match e with 
   | Num n -> NumV n
   | Bool p -> BoolV p
   | Id x -> List.assoc x env
-  | App (_, _) -> NumV 5L (* FIX *)
+  | App (fname, args) -> 
+    let val_args = List.map (fun exp -> (interp ~env:env exp)) args in 
+    let (_, args, body) = lookup_decl fname decls in
+    let f_env = multi_extend_ienv args val_args mt_ienv in
+    interp ~env:f_env ~decls:decls body
   | UnOp (op, e) ->
       begin match op with
       | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)
@@ -99,7 +120,7 @@ let rec interp ?(env=mt_ienv) (e : expr)  : value =
       end
   | If (c, t, f)  -> liftIf (interp ~env:env c) (interp ~env:env t) (interp ~env:env f)
   | Void -> NumV 0L (* This is supposed to do nothing *)
-  | Sys (_,_) -> NumV 0L
+  | Sys (_,_) -> Fmt.failwith "Error: System functions not supported in Interpreter."
 
 let interp_prog p : value = 
-  let (Program (_,exp)) = p in interp exp
+  let (Program (decl,exp)) = p in interp exp ~decls:decl
