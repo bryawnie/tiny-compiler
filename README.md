@@ -11,7 +11,7 @@ Para la entrega 2, se esperaba implementar las siguientes especificaciones bási
 - [x] [Compilar funciones de primer orden](#funciones-propias)
 
 Mientres que dentro de los objetivos extra, existían 2 opciones, donde se escogió la segunda:
-- [ ] [Gestión de errores de recursos]
+- [ ] Gestión de errores de recursos
 - [x] [Convención de llamada a funciones x86-64](#foreign-interfaces)
 
  A continuación se detalla la implementación de cada una de las especificaciones nombradas.
@@ -108,10 +108,44 @@ Es importante tener en cuenta la aridad de la función definida, ya que si no se
 Con esto ya está todo listo para llamar a la funcion con ``call``. Sin embargo después de ello, es necesario restaurar el **RSP**, por lo que se le suma el espacio que fue desplazado (de haber sido necesario) al hacer ``push`` de los argumentos. Finalmente se restauran los registros utilizados durante el paso de parámetros en la llamada.
 
 ### Funciones Propias
+TODO 
 
 ### Foreign Interfaces
+Se implementa un mecanismo genérico para el llamado de funciones C. Para definir una función externa, será necesario definirla previamente de la siguiente forma:
+```
+(defsys <function_name> <arg_types>* -> <return_type>)
+```
+Por ejemplo, si se quiere definir la función ``min``, sera necesario definirla como:
+```
+(defsys min int int -> int)
+```
+Declarando que la función recibe 2 enteros y retorna un entero.
+
+Para realizar la llamada a las funciones, es necesario añadir un ``@sys`` a su nombre, indicando que se trata de una función del sistema. Esto último permite una mejor convivencia entre funciones de C y las funciones propias del lenguaje. Siguiendo con el ejemplo de ``min``, siguiendo esta convención, se debe invocar como:
+```
+(@sys min 1 3)
+```
+En general, la forma de invocar funciones de C (debidamente definidas con ``defsys``), es:
+```
+(@sys <function_name> <arg_1> ... <arg_n>)
+```
+
+Este diseño, permite hacer un _checking_ de aridad y de tipos, tanto de los argumentos como de lo retornado, levantando un error en tiempo de ejecución en caso de detectar una inconsistencia con lo declarado.
+
+Al adoptar esta interfaz, ya no se podrán llamar primitivas en C como print sin antes definirlas debidamente con su ``defsys``.
+
 
 ## Tests
-Los tests fueron expandidos para testear a mayor profundidad las características implementadas dentro del compilador. 
+Los tests fueron expandidos para testear a mayor profundidad las características implementadas dentro del compilador, en particular, dado que en esta entrega se implementa el _checking_ de tipos, se añadieron varios tests que comprueban que estos errores se produscan.
 
-Los tests al pipeline completo se encuentran en archivos ``*.test``, separados en subcarpetas según la funcionalidad que intentan evaluar. Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
+Los tests al pipeline completo se encuentran en archivos ``*.test``, separados en subcarpetas según la funcionalidad que intentan evaluar.
+
+- ``\binOp``: operaciones binarias ``+ - * / < = and or``.
+- ``\c_calls``: funciones foráneas de C (como ``print``).
+- ``\functions``: funciones propias.
+- `if`: condicionales.
+- `let`: definición de variables locales.
+- `types`: tests respecto a tipos (boolean / int).
+- `unOp`: operaciones unarias `add1 sub1 not`.
+
+Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
