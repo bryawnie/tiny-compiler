@@ -263,7 +263,7 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
   else
     let lenv = let_env_from_params params empty_env in
     let _, fenv, senv = env in
-  ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
+    [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
     @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
 let rec compile_declarations (decls: decl list) (env: env) :
