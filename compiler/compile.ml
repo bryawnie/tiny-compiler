@@ -182,16 +182,30 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       | And -> compile_shortcut_binop l r env (gensym "and") false compile_expr
       | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
     end
-  | If (c, t, f) -> (compile_expr c env) @ check_arg return_register not_a_boolean @ compile_if compile_expr t f env
+  | If (c, t, f) -> (compile_expr c env) 
+    @ check_arg return_register not_a_boolean 
+    @ compile_if compile_expr t f env
+  | Sys (fname, args) ->
+    let params, return = sys_lookup fname env in
+    let arity = List.length params in
+    let argc = List.length args in
+    if (argc != arity) 
+      then Fmt.failwith 
+      "Arity mismatch: system function %s expects %d arguments but got %d"
+      fname arity argc
+    else
+      (* type check *)
+      let compiled_args = List.map (fun e -> compile_expr e env) args in 
+      (* Compile foreign function call here *)
+      ; []
   | App (fname, args) ->
     let arity = fun_lookup fname env in
     let argc = List.length args in
     if (argc != arity)
       then Fmt.failwith 
-        "Arity mismatch: function f expects %d arguments but got %d" arity argc
+        "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
       else
         let curry_compile = fun expr -> compile_expr expr env in
-        let arity = List.length args in
         let compiled_args = List.map curry_compile args in
         let pushed_regs   = List.rev (push_regs arity arg_regs) in
         let prepare_args  = List.rev (prepare_call compiled_args arg_regs) in 
@@ -255,6 +269,9 @@ let rec dupExist lst: 'a =
 
 let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
+  let _, fenv, senv in
+  if List.mem_assoc fname senv 
+    then Fmt.failwith "Duplicate function definition: %s" fname else
   let dup_arg = dupExist params in
   let stack_offset = Int64.of_int (stack_offset_for_local body) in
   if dup_arg != "" 
@@ -266,6 +283,13 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
     [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
     @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
+let compile_extern (fname: string) (env: env) : instruction list =
+  let _, _, senv = env in
+  if List.mem_assoc fname senv 
+    then Fmt.failwith "Duplicate system function definition: %s" fname 
+  else
+    [IExtern fname]
+
 let rec compile_declarations (decls: decl list) (env: env) :
 instruction list * instruction list =
   match decls with
@@ -275,7 +299,7 @@ instruction list * instruction list =
     match dec with
     | FunDef (fname, params, body) -> 
       compile_def fname params body env @ funs, exts
-    | SysFunDef (fname, _, _) -> funs, (IExtern fname)::exts
+    | SysFunDef (fname, _, _) -> funs, (compile_extern fname env)::exts
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
