@@ -200,13 +200,14 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       (* type check *)
       let compiled_args = List.map (fun e -> compile_expr e env) args in 
       let pushed_regs   = List.rev (push_regs arity arg_regs) in
-      let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
+      let prepare_call  = List.concat 
+      (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
       let restore_rsp   = if arity > 6 
         then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
         else [] in
       let popped_regs   = pop_regs arity arg_regs in
-      pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs @ type_checking return_register type_return
-      (* Compile foreign function call here *)
+      pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
+      @ type_checking return_register type_return
   | App (fname, args) ->
     let arity = fun_lookup fname env in
     let argc = List.length args in
@@ -291,12 +292,13 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
   let _, fenv, senv = env in
   let dup_arg = dupExist params in
   if dup_arg != "" 
-    then Fmt.failwith "Duplicated parameter name in function %s: %s"
+    then Fmt.failwith "Duplicate parameter name in function %s: %s"
       fname dup_arg
   else
     let lenv = let_env_from_params params empty_env in
     let stack_offset = Int64.of_int (stack_offset_for_local body) in
-    [ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
+    [IEmpty ; ILabel fname] @ callee_prologue 
+    @ [ISub (Reg RSP, Const stack_offset)]
     @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
 let compile_declaration (dec: decl) (env: env) 

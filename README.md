@@ -108,9 +108,46 @@ Es importante tener en cuenta la aridad de la función definida, ya que si no se
 Con esto ya está todo listo para llamar a la funcion con ``call``. Sin embargo después de ello, es necesario restaurar el **RSP**, por lo que se le suma el espacio que fue desplazado (de haber sido necesario) al hacer ``push`` de los argumentos. Finalmente se restauran los registros utilizados durante el paso de parámetros en la llamada.
 
 ### Funciones Propias
-TODO 
+Una función se define con una declaración de la forma
+```
+(def (<function_name> <parameters>*) <body_expr>)
+```
+al inicio de un programa. Por ejemplo, la función identidad se define con:
+```
+(def (id x) x)
+```
+La compilación de un llamado a función de este tipo es idéntico al descrito anteriormente en el caso de las funciones de C. La única diferencia es que ahora la aridad de las funciones ya no está "hard-coded", por lo que es necesario guardar en algún lugar esta información. Para ello, se redefine el ambiente de compilación del siguiente modo:
+```
+type let_env = (string * int) list
+type fun_env = (string * int) list
+type env = let_env * fun_env
+```
+donde ``let_env`` almacena el offset con respecto a la base del stack (posición en memoria) de los identificadores ``let``, y ``fun_env`` almacena las aridades de las funciones declaradas al inicio de un programa. Esto significa que una función y una variable pueden tener el mismo nombre sin causar conflicto.
+La compilación de la definición de una función, por otro lado, se reduce a compilar el cuerpo (una expresión) en un ambiente donde los parámetros se encuentren ligados a su identificador correspondiente, y añadir al inicio y al final secciones de acuerdo con la convención de llamados x64 (guardar y restaurar RBP, mover RSP, etc), preceder todo esto por una etiqueta con el nombre de la función. 
+El uso de la convención x64 significa que ahora las variables pueden encontrarse en registros, por lo que es necesario modificar nuevamente la definición de un ``let_env``.
+```
+type memloc =
+  | MReg of reg
+  | StackOffset of int
 
-### Foreign Interfaces
+type let_env = (string * memloc) list
+```
+Finalmente, el ``fun_env`` en que se compila el cuerpo de un programa puede ser determinado antes de compilar el cuerpo de las funciones, por lo que al hacerlo en este ambiente se hace posible definir funciones recursivas fácilmente. Así, el siguiente programa con funciones mutuamente recursivas es válido y se ejecuta según lo esperado:
+```
+(def (pin n) 
+  (if (= n 0)
+    0
+    (pon (- n 1))))
+
+(def (pon n) 
+  (if (= n 0)
+    0
+    (pin (- n 1))))
+
+(pin 10)
+  
+```
+### Interfaz de Funciones Foráneas
 Se implementa un mecanismo genérico para el llamado de funciones C. Para definir una función externa, será necesario definirla previamente de la siguiente forma:
 ```
 (defsys <function_name> <arg_types>* -> <return_type>)
@@ -131,6 +168,19 @@ En general, la forma de invocar funciones de C (debidamente definidas con ``defs
 ```
 
 Este diseño, permite hacer un _checking_ de aridad y de tipos, tanto de los argumentos como de lo retornado, levantando un error en tiempo de ejecución en caso de detectar una inconsistencia con lo declarado.
+
+Puesto que la información necesaria para llamar funciones externas (aridad,tipo de los parámetros, tipo de retorno) es distinta a la necesaria para funciones internas (aridad únicamente), se redefine el ambiente de compilación del siguiente modo:
+```
+type dtype =
+  | IntT
+  | BoolT
+  | AnyT
+
+type sys_env = (string * dtype list * dtype) list 
+
+type env = let_env * fun_env * sys_env
+```
+Así, además, el espacio de nombres para funciones externas queda separado de el de funciones propias.
 
 Al adoptar esta interfaz, ya no se podrán llamar primitivas en C como print sin antes definirlas debidamente con su ``defsys``.
 
