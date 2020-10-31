@@ -1,0 +1,7 @@
+NAME: Testing undefined foreign function
+DESCRIPTION: tests foreign functions
+STATUS: CT error
+SRC:
+(@sys min 1 2)
+EXPECTED:
+Undefined system function: min

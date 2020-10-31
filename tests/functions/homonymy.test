@@ -4,7 +4,6 @@ STATUS: CT error
 SRC:
 (def (f x) x)
 (def (f y) y)
-
 (f 3)
 EXPECTED:
-Duplicate function name: f
+Duplicated function name: f

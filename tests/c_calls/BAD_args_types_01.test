@@ -1,7 +1,8 @@
-NAME: Compound min
+NAME: Testing min
 DESCRIPTION: tests functions with 2 arguments
+STATUS: RT error
 SRC:
 (defsys min int int -> int)
-(@sys min 6 (@sys min 3 4))
+(@sys min true 2)
 EXPECTED:
-3
+Expected number, but got true

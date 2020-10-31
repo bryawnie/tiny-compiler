@@ -6,21 +6,13 @@ SRC:
 (* 5
     (add1 
         (@sys min_of_8 
-            (@sys print 7) 
-            (@sys print 6)
-            (@sys print 5)
-            (@sys print 1)
-            (@sys print 0)
-            (@sys print 3)
-            (@sys print 2)
-            (@sys print 4))))
+            7
+            6
+            5
+            1
+            0
+            3
+            2
+            4)))
 EXPECTED:
-> 4
-> 2
-> 3
-> 0
-> 1
-> 5
-> 6
-> 7
 5

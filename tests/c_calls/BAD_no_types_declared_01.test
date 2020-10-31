@@ -1,0 +1,8 @@
+NAME: Testing undefined foreign function
+DESCRIPTION: tests foreign functions
+STATUS: CT error
+SRC:
+(defsys min)
+(@sys min 1 2)
+EXPECTED:
+Syntax error: (defsys min)

@@ -134,13 +134,23 @@ let extend_arg_env (name: string) (env: let_env) : (let_env * arg) =
   let loc = get_arg_slot env in
   ((name, loc)::env, memloc_to_arg loc)
 
+let rec existsInEnv elem lst =
+  match lst with
+  | [] -> false
+  | (name, _)::tl -> elem = name || existsInEnv elem tl
+
 (* Extends a fun_env with a new function *)
 let extend_fun_env (fname: string) (arity: int) (fenv: fun_env) : fun_env =
-  (fname, arity)::fenv
+  if existsInEnv fname fenv then
+    Fmt.failwith "Duplicated function name: %s" fname
+  else (fname, arity)::fenv
 
 (* Extends a sys_env with a new function *)
 let extend_sys_env (fname: string) (params: dtype list) (return_type: dtype)
-  (senv: sys_env) : sys_env = (fname, (params, return_type))::senv
+  (senv: sys_env) : sys_env = 
+  if existsInEnv fname senv then
+    Fmt.failwith "Duplicated system function name: %s" fname
+  else (fname, (params, return_type))::senv
 
 
 (*--------------------------

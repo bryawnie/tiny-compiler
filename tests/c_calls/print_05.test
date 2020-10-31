@@ -1,6 +1,7 @@
 NAME: Testing print (negatives)
 DESCRIPTION: printing negative numbers
 SRC:
+(defsys print any -> any)
 (@sys print (+ (@sys print 5) (@sys print -3)))
 EXPECTED:
 > -3
