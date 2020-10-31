@@ -302,7 +302,7 @@ let interp_tests =
       (NumV 120L)
       (interp_prog (Program (
         [FunDef ("fact", ["n"], If (BinOp (Less, Id "n", Num 0L), Num 1L,
-          UnOp (Sub1, Id "n")))],
+          BinOp (Mul, Id "n", App("fact", [UnOp (Sub1, Id "n")]))))],
         App ("fact", [Num 5L])))) ;
     check value "Mutually recursive function"
       (NumV 0L)
