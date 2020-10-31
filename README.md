@@ -3,37 +3,82 @@ __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
 
-## Entrega 1
-Para la entrega 1, se implementan las siguientes especificaciones:
-- [x] [``let``-bindings.](#let---bindings)
-- [x] [Valores Booleanos ( ``true``, ``false`` ).](#valores-booleanos)
-- [x] [Aritmética de Enteros ( ``+ - * /`` ).](#aritmética-de-enteros)
-- [x] [Aritmética de Booleanos ( ``and``, ``or``, ``not`` ).](#aritmética-de-booleanos)
-- [x] [_Shortcut semantics_ para operadores ``and`` y ``or``.](#aritmética-de-booleanos)
-- [x] [Condicionales (``if`` sentences).](#condicionales-if-sentences)
-- [x] [Comparadores ( ``<``, ``=`` ).](#comparadores----)
+## Entrega 2
+Para la entrega 2, se esperaba implementar las siguientes especificaciones básicas:
 
-El listado refleja tanto los objetivos básicos como los objetivos extra de esta entrega. A continuación se detalla la implementación de cada una de las especificaciones nombradas.
+- [x] [Gestión de errores de tipos](#TODO)
+- [x] [Añadir funciones externas (FFI)](#TODO)
+- [x] [Compilar funciones de primer orden] (#TODO)
+
+Mientres que dentro de los objetivos extra, existían 2 opciones, donde se escogió la segunda:
+- [ ] [Gestión de errores de recursos]
+- [x] [Convención de llamada a funciones x86-64](#TODO)
+
+ A continuación se detalla la implementación de cada una de las especificaciones nombradas.
 
 ## Implementación
 
-### ``let`` - bindings
-La expresión ``let`` posee la siguiente sintaxis:
-```Scheme
-(let (id val) body)
-```
-En concreto, permite asignar el valor de la expresión ``val`` a una id, para luego operar con ella en el cuerpo (``body``) de la expresión misma. 
+### Gestión de errores de tipo (_type-checking_) 
 
-Para la implementación de ``let``, primero se compila el valor de ``val``, quedando en el registro de retorno. Posteriormente, se guarda en el stack con un offset _i_ indicado por el ambiente del compilador:
-```
-mov [RSP - 8*i], RAX
-```
-Luego se asocia dicho valor a la ``id``, y se procede a compilar el ``body`` de la expresión con un ambiente extendido con el valor de la ``id``.
+Se implementa una gestión dinamica de errores de tipo en tiempo de ejecución, lo cual impediría la ejecución de sentencias como ``(+ 1 false)`` o ``(not 3)``. 
 
-De este modo, cuando se necesite obtener el valor de la variable, se busca en __RSP__, utilizando el índice _i_ al que está asociado en el ambiente:
+Para realizar esto, se añadió un _type-checking_ para validar el tipo de valor según corresponda. Como es de esperarse, esta validación varía segun el tipo de dato.
+
+#### **Número**
+Para hacer una _checking_ de que el tipo sea **numérico**, se implementa a nivel _assembly_ lo siguiente:
+``` 
+  mov  error_code_register, not_a_number
+  mov  tested_register, RAX
+  test tested_register, 0x1
+  jnz  error_handler
 ```
-mov RAX, [RSP - 8*i]
+Lo que hace esto es fijar como posible código de error ``not_a_number`` en el registro usado para guardar los códigos de errores (en práctica **RBX**). Luego, se mueve el registro de retorno a el registro que se utilizará para guardar la variable que podría ser errónea ``tested_register`` (en concreto **RCX**).
+
+Finalmente, se hace una instrucción ``test``, la cual realiza un **AND** con la máscar de bits que representa el bit de tipo. Como los números tienen asociado el bit de tipo 0, esta operación debería producir 0 como valor. Por lo tanto, si es distinto a 0, significa que se trata de un booleano, y se hace un salto al ``error_handler``.
+
+#### **Booleano**
+Por otro lado, para el _type-checking_ de valores **booleanos**, se emplea lo siguiente:
+``` 
+  mov  error_code_register, not_a_boolean
+  mov  tested_register, RAX
+  test tested_register, 0x1
+  jz  error_handler
 ```
+El proceso es similar a la verificación numérica, con una ligera diferencia en la condición de salto. Dado que los booleanos poseen 1 en el bit de tipo, la operación ``test`` debería generar un valor distinto a 0 (en particular, 1).
+
+Por lo tanto, si el valor obtenido es 0, significa que se trata de un número encubierto, lo cual puede lograr que la operación que requería un tipo booleano falle.
+
+#### **Manejo de Errores**
+Para manejar los errores, se utiliza el label ``error_handler``, que contiene el siguiente código _assembly_:
+```
+error_handler:
+  mov  RSI, RCX
+  mov  RDI, RBX
+  call error
+```
+En simple, prepara los argumentos para realizar una llamada a la función C **error**.
+
+#### **Función Error (en C)**
+Los errores son derivados a esta función, que en concreto es:
+```C
+void error(int errCode, val v) {
+  if (errCode == ERR_NOT_NUMBER) {
+    fprintf(stderr, "Expected number, but got %s\n", value_to_str(v));
+  } else if (errCode == ERR_NOT_BOOLEAN) {
+    fprintf(stderr, "Expected boolean, but got %s\n", value_to_str(v));
+  } else {
+    fprintf(stderr, "Unknown error code: %d", errCode);
+  }
+  exit(errCode);
+}
+```
+Según el código de error, imprime por salida estándar el error de tipo asociado.
+
+#### **Expresiones con _type-checking_**
+Se implementó una gestión de errores de tipo para cada una de las siguiente operaciones disponibles del lenguaje:
+
+1. **UnOps**: Para cada una de las operaciones unarias (_ie:_ ``add1``, ``sub1`` y ``not``), se implementa un verificador de tipo antes de aplicar tal operación sobre su argumento.
+
 
 ### Valores Booleanos
 Ahora el lenguaje soporta dos tipos de valores: enteros y booleanos. Puesto que ambos tipos de dato están representados con un entero de 64 bits, se ha separado el bit menos significativo para ser utilizado a modo de marcador; un entero tiene un 0, mientras que un booleano posee un 1.

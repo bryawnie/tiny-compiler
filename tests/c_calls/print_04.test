@@ -1,10 +1,11 @@
 NAME: Multiple print
 DESCRIPTION: lets make it more interesting
 SRC:
-(let (x (print (+ (print 2) 3)))
-  (if (print (< (print 3) 2)) 
-    (print 5)
-    (not (print true))))
+(defsys print any -> any)
+(let (x (@sys print (+ (@sys print 2) 3)))
+  (if (@sys print (< (@sys print 3) 2)) 
+    (@sys print 5)
+    (not (@sys print true))))
 EXPECTED:
 > 2
 > 5

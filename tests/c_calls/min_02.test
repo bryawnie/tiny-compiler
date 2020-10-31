@@ -1,6 +1,7 @@
 NAME: Compound min
 DESCRIPTION: tests functions with 2 arguments
 SRC:
-(min 6 (min 3 4))
+(defsys min int int -> int)
+(@sys min 6 (min 3 4))
 EXPECTED:
 3

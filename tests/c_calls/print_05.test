@@ -1,7 +1,7 @@
 NAME: Testing print (negatives)
 DESCRIPTION: printing negative numbers
 SRC:
-(print (+ (print 5) (print -3)))
+(@sys print (+ (@sys print 5) (@sys print -3)))
 EXPECTED:
 > -3
 > 5
