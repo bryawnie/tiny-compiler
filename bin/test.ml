@@ -293,6 +293,33 @@ let interp_tests =
       (NumV 6L);
   in
 
+  let test_interp_functions () =
+    check value "Identity function"
+      (NumV 256L)
+      (interp_prog (Program ([FunDef ("f", ["x"], Id "x")],
+        App ("f", [Num 256L]))));
+    check value "Recursive function"
+      (NumV 120L)
+      (interp_prog (Program (
+        [FunDef ("fact", ["n"], If (BinOp (Less, Id "n", Num 1L), Num 1L,
+          BinOp (Mul, Id "n", App("fact", [UnOp (Sub1, Id "n")]))))],
+        App ("fact", [Num 5L])))) ;
+    check value "Mutually recursive function"
+      (NumV 0L)
+      (interp_prog @@ Program(
+        [FunDef ("pon", ["n"],
+          If (BinOp (Eq, Id "n", Num 0L),
+            Num 0L,
+            App ("pin", [BinOp (Sub, Num (-1L), Id "n")]))) ;
+        FunDef ("pin", ["n"],
+          If (BinOp (Eq, Id "n", Num 0L), 
+            Num 0L, 
+            App ("pon", [BinOp (Sub, Num 1L, Id "n")])))], 
+      App ("pin", [Num 4L]))) ;
+    check_raises "Undefined function error"
+      (Failure "Undefined function name: f")
+      (fun () -> ignore @@ interp_prog (Program ([], App ("f", [Num 0L]))))
+  in
   let test_interp_prog () =
     check value 
     "(def (double x) (+ x x))
@@ -317,6 +344,7 @@ let interp_tests =
     test_case "Integer BinOps" `Slow test_interp_binop;
     test_case "If sentences" `Slow test_interp_if;
     test_case "Let-bindings" `Slow test_interp_let;
+    test_case "First class functions" `Slow test_interp_functions;
     test_case "Prog" `Slow test_interp_prog;
   ]
 
