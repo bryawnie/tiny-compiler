@@ -311,19 +311,6 @@ let interp_tests =
     test_case "Let-bindings" `Slow test_interp_let;
   ]
 
-let env_tests =
-  let open Env in
-  
-  let test_lookup_fun_env () =
-    check int "Find function"
-      2
-      (fun_lookup "min" ([], ["print", 1; "min", 2; "min_of_8", 8;]))
-  in
-  
-  "env", [
-    test_case "Find function in env" `Quick test_lookup_fun_env
-  ]
-
 let interpreter (src : string) : string =
   let open Interp in
   let e = Parse.(parse_expr (sexp_from_string src)) in
@@ -335,7 +322,7 @@ let interpreter (src : string) : string =
  * See the documentation at https://github.com/mirage/alcotest *)
 let () =
   run "Compiler" @@
-    [ parse_tests ; interp_tests ; env_tests]
+    [ parse_tests ; interp_tests ]
     @ Bbctester__Test.tests_from_dir 
         ~runtime:"compiler/rtsys.c" 
         ~compiler:compile_src 

@@ -19,7 +19,7 @@ let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
 
 (* FOREIGN FUNCTIONS *)
-let foreign_functions : fun_env = [
+let built_in_foreign_functions : fun_env = [
   "print", 1;
   "min", 2;
   "min_of_8", 8;
@@ -148,7 +148,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
         (* bool_bit is a 64-bit value, so it must be moved into a register
         before use as an operand *)
     end
-  | Id x  -> [ IMov (return_register, lookup x env) ]
+  | Id x  -> [ IMov (return_register, let_lookup x env) ]
   | Let (id,v,b) -> 
       let (new_env, loc) = extend_env id env in
       let compiled_val = compile_expr v env in
@@ -253,49 +253,50 @@ let rec dupExist lst: 'a =
   | [] -> ""
   | hd::tl -> if (exist hd tl) then hd else dupExist tl
 
-let compile_declaration (d : decl) (fenv: fun_env) : instruction list * string =
-  let (FunDef (fname, params, body)) = d in
+let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
+  instruction list =
   let dup_arg = dupExist params in
   let stack_offset = Int64.of_int (stack_offset_for_local body) in
-  if dup_arg != "" then
-    Fmt.failwith  "Duplicated parameter name in function %s: %s" fname dup_arg
+  if dup_arg != "" 
+    then Fmt.failwith "Duplicate parameter name in function %s: %s"
+      fname dup_arg
   else
-  let lenv = make_function_let_env params empty_env in
+    let lenv = let_env_from_params params empty_env in
+    let _, fenv, senv = env in
   ([ILabel fname] @ callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
-  @ compile_expr body (lenv, foreign_functions @ fenv) @ callee_epilogue @ [IRet], fname)
+    @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
-let rec compile_declarations ?(f_declared = []) (dl: decl list) (fenv: fun_env): instruction list =
-  match dl with
-  | [] -> []
-  | decl::rest -> 
-    let (compiled, name) = compile_declaration decl fenv in 
-    if List.mem name f_declared then 
-      Fmt.failwith  "Duplicated function name: %s" name
-    else 
-      compiled  @ compile_declarations rest fenv ~f_declared:(f_declared @ [name])
-
-
-
+let rec compile_declarations (decls: decl list) (env: env) :
+instruction list * instruction list =
+  match decls with
+  | [] -> [], []
+  | dec::tail ->
+    let funs, exts = compile_declarations tail env in
+    match dec with
+    | FunDef (fname, params, body) -> 
+      compile_def fname params body env @ funs, exts
+    | SysFunDef (fname, _, _) -> funs, (IExtern fname)::exts
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
-      let fenv = fun_env_from_decls decs foreign_functions in
-      let declarations = compile_declarations decs fenv in
-      let instrs = compile_expr exp (empty_env, fenv) in
+      let fenv = fun_env_from_decls decs empty_fun_env in
+      let senv = sys_env_from_decls decs empty_sys_env in
+      let env  = empty_env, fenv, senv in
+      let functions, externs = compile_declarations decs env in
+      let instrs = compile_expr exp env in
       let stack_offset = Int64.of_int (stack_offset_for_local exp) in
-      let prelude ="
-section .text
-extern print
-extern min
-extern min_of_8
+      Fmt.pf fmt 
+"section .text
 extern error
+%a
 global our_code_starts_here
-our_code_starts_here:" in
-      Fmt.pf fmt "%s@\n%a" prelude pp_instrs 
-        (callee_prologue @ [ISub (Reg RSP, Const stack_offset)] (* Change this *)
-        @ instrs @ callee_epilogue @ [IRet] @ error_handler @ declarations)
+our_code_starts_here:
+%a" 
+      pp_instrs externs pp_instrs (callee_prologue 
+      @ [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
+      @ error_handler @ functions)
 
 (* The Pipeline *)
 let compile_src = 

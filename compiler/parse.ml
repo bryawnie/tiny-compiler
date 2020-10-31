@@ -44,8 +44,8 @@ let sexp_from_file (filename : string) : CCSexp.sexp =
 open Ast
 
 let notFuns = [
-  "true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*"; "/";
-  "if"; "let"; "<"; "="; "def"]
+  "true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*";
+  "/"; "if"; "let"; "<"; "="; "def"]
 
 let rec parse_expr (sexp : sexp) : expr = 
   match sexp with
@@ -67,8 +67,10 @@ let rec parse_expr (sexp : sexp) : expr =
   | `List [`Atom "/" ; l ; r ] -> BinOp (Div, parse_expr l, parse_expr r)
   | `List [`Atom "<" ; l ; r ] -> BinOp (Less, parse_expr l, parse_expr r)
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse_expr l, parse_expr r)
-  | `List [`Atom "let" ; `List [`Atom id; e]; body] -> Let (id, parse_expr e, parse_expr body)
-  | `List [`Atom "if" ; c; t; f] -> If (parse_expr c, parse_expr t, parse_expr f)
+  | `List [`Atom "let" ; `List [`Atom id; e]; body] -> 
+    Let (id, parse_expr e, parse_expr body)
+  | `List [`Atom "if" ; c; t; f] -> 
+    If (parse_expr c, parse_expr t, parse_expr f)
   | `List (`Atom fname::args) -> 
     if List.mem fname notFuns
       then Fmt.failwith "Not a valid function: %s" fname else
