@@ -7,7 +7,7 @@ Sergio Morales & Bryan Ortiz.
 Para la entrega 2, se esperaba implementar las siguientes especificaciones básicas:
 
 - [x] [Gestión de errores de tipos](#gestión-de-errores-de-tipo-type-checking)
-- [x] [Añadir funciones externas (FFI)](#TODO)
+- [x] [Añadir funciones externas (FFI)](#funciones-externas)
 - [x] [Compilar funciones de primer orden](#TODO)
 
 Mientres que dentro de los objetivos extra, existían 2 opciones, donde se escogió la segunda:
@@ -84,6 +84,30 @@ Se implementó una gestión de errores de tipo para cada una de las siguiente op
 3. **If**: se verifica que la condición sea de tipo booleano, justo después de compilarla.
 
 ### Funciones Externas
+Se añaden llamados a funciones externas en C. Para ello fue necesario implementar la convención de llamada ``x64`` (la cual también es aplicada a funciones internas).
+
+Para aplicar una función externa, primero esta requiere estar previamente definida en el archivo ``rtsys.c``. Luego, debe declararse como:
+```
+extern function
+```
+en el encabezado del código _assembly_ del programa. Finalmente, el caller debe respetar la convención de llamado, pasando los argumentos en los registros correspondientes o por stack.
+
+Para implementar la _calling convention_, de creó una lista con los 6 registros de paso de parámetros: **RDI, RSI, RDX, RCX, R8, R9**.
+
+Primero, se hace un push de los registros a utilizar para el paso de parámetros, esto mediante la función ``push_regs``. Luego, la función ``prepare_call`` inserta los resultados de compilar cada uno de los argumentos en los registros correspondientes (o en stack de ser necesario). Cabe destacar que como cada uno de los argumentos se guarda en orden inverso a como se declaran, su compilación también se realiza en orden inverso. Es decir:
+```
+(foo (print 1) (print 2))
+```
+Genera por salida estándar 
+```
+> 2
+> 1
+```
+Es importante tener en cuenta la aridad de la función definida, ya que si no se entrega la cantidad de argumentos requeridos, habrá un error en tiempo de compilación. 
+
+Con esto ya está todo listo para llamar a la funcion con ``call``. Sin embargo después de ello, es necesario restaurar el **RSP**, por lo que se le suma el espacio que fue desplazado (de haber sido necesario) al hacer ``push`` de los argumentos. Finalmente se restauran los registros utilizados durante el paso de parámetros en la llamada.
+
+
 
 ## Tests
 Se implementan tests al pipeline completo en archivos ``*.test``. Para el testing del intérprete y parser, se generan distintas baterías de tests en ``bin\test.ml``.
