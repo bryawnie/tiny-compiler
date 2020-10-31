@@ -71,6 +71,8 @@ let rec parse_expr (sexp : sexp) : expr =
     Let (id, parse_expr e, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
+  | `List (`Atom "@sys"::(`Atom fname::args)) -> 
+    Sys (fname, List.map parse_expr args)
   | `List (`Atom fname::args) -> 
     if List.mem fname notFuns
       then Fmt.failwith "Not a valid function: %s" fname else
@@ -84,10 +86,24 @@ let parse_param (sexp : sexp) : string =
   match sexp with
   | `Atom id -> id
   | _ -> Fmt.failwith "Not a valid parameter name: %a" CCSexp.pp sexp
+
+let parse_type (sexp : sexp) : dtype =
+  match sexp with
+  | `Atom "int" -> IntT
+  | `Atom "bool" -> BoolT
+  | `Atom "any" -> AnyT
+  | _ -> Fmt.failwith "Not a valid type: %a" CCSexp.pp sexp
 let parse_decl (sexp : sexp) : decl = 
   match sexp with
   | `List [`Atom "def" ; `List (`Atom name :: params) ; body] ->
     FunDef (name, List.map parse_param params, parse_expr body)
+  | `List (`Atom "defsys"::(`Atom name::rest)) ->
+    begin
+      match List.rev rest with
+      | (ret::(`Atom "->"::params)) ->
+        SysFunDef (name, List.map parse_type params, parse_type ret)
+      | _ -> Fmt.failwith "Syntax error: %a" CCSexp.pp sexp
+    end
   | _ -> Fmt.failwith "Not a valid declaration: %a" CCSexp.pp sexp
 
 let parse_prog (sexps : sexp list) : prog = 
