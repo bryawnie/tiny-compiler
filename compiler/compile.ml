@@ -2,14 +2,19 @@ open Ast
 open Asm
 open Env
 open Encode
+open Gensym
 
 (** Register usage conventions **)
-(*  RAX = return value | first argument to a instruction
-    R11 = second argument to a instruction *)
-let return_register = Reg RAX
-let argument_register = Reg R11
-let error_code_register = Reg RBX
-let error_register = Reg RCX
+(*  
+  RAX = return value | first argument to a instruction
+  R11 = second argument to a instruction
+  RBX = Error code register
+  RCX = Error var register 
+*)
+let ret_reg = Reg RAX
+let arg_reg = Reg R11
+let err_cod_reg = Reg RBX
+let err_reg = Reg RCX
 let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
 ]
@@ -18,98 +23,22 @@ let arg_regs = [
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
 
-(* 
-  A gensym for standard symbols and specific instructions
-  (Hope it provides a better understanding of generated asm) 
-*)
-let gensym  =
-  let counter = ref 0 in 
-  let if_counter = ref 0 in 
-  let eq_counter = ref 0 in
-  let less_counter = ref 0 in  
-  (fun basename ->
-    match basename with
-    | "if" -> (if_counter := !if_counter + 1;
-      Format.sprintf "if_false_%d" !if_counter)
-    | "done" -> Format.sprintf "done_%d" !if_counter
-    | "eq" -> (eq_counter := !eq_counter + 1;
-      Format.sprintf "eq_%d" !eq_counter )
-    | "less" -> (less_counter := !less_counter + 1;
-    Format.sprintf "less_%d" !less_counter )
-    | _ -> (counter := !counter + 1;
-      Format.sprintf "%s_%d" basename !counter))
-
-
-let create_gensym s = 
-  let r = ref 0 in 
-  (fun () -> incr r; s ^ "_" ^ string_of_int !r)  
-
 (* Type Checker for a register and a type expected *)
 let check_arg (register: arg) (type_error: arg) : instruction list =
-  [IMov (error_code_register, type_error)] @
-  [IMov (error_register, register)] @
-  [ITest (error_register, Const 1L)] @
+  [IMov (err_cod_reg, type_error)] @
+  [IMov (err_reg, register)] @
+  [ITest (err_reg, Const 1L)] @
   if type_error == not_a_number then
   [IJnz "error_handler"] else [IJz "error_handler"]
 
+(* This function handles the request for a type checking *)
 let type_checking (register: arg) (type_expected: dtype): instruction list =
   match type_expected with
   | IntT -> check_arg register not_a_number
   | BoolT -> check_arg register not_a_boolean
   | AnyT -> [] 
   
-(* Shortcut typechecker for binary operations *)
-let check_binops (type_error: arg) =
-  check_arg return_register type_error @ check_arg argument_register type_error
-
-(* Compiles instructions common to binary operators. Moves left argument
-into RAX (return_register), and the right one into R11 (argument_register).*)
-let compile_binop_preamble (l: expr) (r: expr) (env: env)
-  (compiler: expr -> env -> instruction list) : instruction list =
-  let compiled_right = compiler r env in
-  let new_env, loc = extend_env (gensym "tmp") env in
-  let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (loc, return_register) ] @ 
-  compiled_left  @ [ IMov (argument_register, loc) ]
-
-(* Compiles and/or operators *)
-let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
-  (compiler: expr -> env -> instruction list) : instruction list =
-  let compare = [
-    IMov (argument_register, Const (encode_bool skip_on)) ;
-    ICmp (return_register, argument_register) ; 
-    IJe lbl
-  ] in
-  compiler l env @ check_arg return_register not_a_boolean @ compare @ 
-  compiler r env @ check_arg return_register not_a_boolean @ compare
-  @ [IMov (return_register, Const (encode_bool (not skip_on))) ; ILabel lbl]
-
-(* Compiles < and = comparators *)
-let compile_binop_comparator (cmp_label: string) (inst: instruction) : instruction list =
-  let preamble  =  [
-    ICmp (return_register, argument_register) ; 
-    IMov (return_register, Const true_encoding) 
-  ] in 
-  let ending    =  [
-    IMov (return_register, Const false_encoding) ; 
-    ILabel cmp_label 
-  ] in 
-  preamble @ [inst] @ ending
-  
-(* Compiles IF expressions *)        
-let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (env: env): instruction list =
-  let false_lbl = gensym "if" in
-  let done_lbl  = gensym "done" in 
-  let preamble  = [
-    ICmp (return_register, Const false_encoding);
-    IJe  (false_lbl)
-  ] in
-  preamble
-  @ (compile t env)
-  @ [ IJmp (done_lbl); ILabel(false_lbl) ]
-  @ (compile f env)
-  @ [ ILabel (done_lbl) ]
- 
+(* Returns the instruction list to backup the necesary registers before a function call *)
 let rec push_regs (n: int) (regs: arg list): instruction list =
   if n>0 then
     begin match regs with
@@ -118,6 +47,7 @@ let rec push_regs (n: int) (regs: arg list): instruction list =
     end
   else []
 
+(* Returns the instruction list to restore the necesary registers after a function call *)
 let rec pop_regs (n: int) (regs: arg list): instruction list =
   if n>0 then
     begin match regs with
@@ -126,104 +56,203 @@ let rec pop_regs (n: int) (regs: arg list): instruction list =
     end
   else []
 
+(* Prelude of callee to prepare a call *)
 let rec prepare_call ?(types= []) (ins: instruction list list) (regs: arg list) (check: bool) : instruction list list =
   match ins, regs with
   | [], _ -> []
   | ins::tail_args, reg::tail_regs -> 
-    [ins @ (if check then type_checking return_register (List.hd types) else []) @ [IMov (reg, return_register)] ] 
+    [ins @ (if check then type_checking ret_reg (List.hd types) else []) @ [IMov (reg, ret_reg)] ] 
     @ prepare_call tail_args tail_regs check ~types:(if check then (List.tl types) else types)
   | ins::tail_args, [] -> 
-    [ ins @ (if check then type_checking return_register (List.hd types) else []) @ [IPush return_register]] 
+    [ ins @ (if check then type_checking ret_reg (List.hd types) else []) @ [IPush ret_reg]] 
     @ prepare_call tail_args [] check ~types:(if check then (List.tl types) else types)
 
 
-(* THE MAIN compiler function *)
-let rec compile_expr (e : expr) (env: env) : instruction list =
-  match e with 
-  | Num n -> [ IMov (return_register, Const (encode_int n)) ]
-  | Bool p -> [ IMov (return_register, Const (encode_bool p)) ]
-  | UnOp (op, e) ->
-    begin match op with
-      | Add1 -> compile_expr e env @ type_checking return_register IntT @ [IAdd (return_register, Const 2L)]
-      | Sub1 -> compile_expr e env @ type_checking return_register IntT @ [ISub (return_register, Const 2L)]
-      | Not ->  compile_expr e env @ type_checking return_register BoolT @ [IMov (argument_register, Const bool_bit) ;
-        IXor (return_register, argument_register)]
-        (* bool_bit is a 64-bit value, so it must be moved into a register
-        before use as an operand *)
-    end
-  | Id x  -> [ IMov (return_register, let_lookup x env) ]
-  | Let (id,v,b) -> 
-      let (new_env, loc) = extend_env id env in
-      let compiled_val = compile_expr v env in
-      let save_val     = [ IMov(loc, return_register) ] in
-      compiled_val @ save_val @ (compile_expr b new_env)
-  | BinOp (op, l, r) ->
-    begin
-      match op with
-      | Add -> compile_binop_preamble l r env compile_expr 
-        @ check_binops not_a_number (* Type Checking *)
-        @ [IAdd (return_register, argument_register)]
-      | Sub -> compile_binop_preamble l r env compile_expr
-        @ check_binops not_a_number (* Type Checking *)
-        @ [ISub (return_register, argument_register)]
-      | Mul -> compile_binop_preamble l r env compile_expr
-        @ check_binops not_a_number (* Type Checking *)
-        @ [IMul (return_register, argument_register) ; ISar (return_register, Const 1L)]
-      | Div -> compile_binop_preamble l r env compile_expr
-        @ check_binops not_a_number (* Type Checking *)
-        @ [ICqo ; IDiv (argument_register) ; ISal (return_register, Const 1L)]
-      | Less -> 
-        let less_lbl = gensym "less" in
-        compile_binop_preamble l r env compile_expr 
-        @ check_binops not_a_number (* Type Checking *)
-        @ compile_binop_comparator less_lbl (IJl less_lbl)
-      | Eq -> (* Doesn't need a type checking *)
-        let eq_lbl =  gensym "eq" in
-        compile_binop_preamble l r env compile_expr
-        @ compile_binop_comparator eq_lbl (IJe eq_lbl)
-      (* And & Or have shortucut semantics *)
-      | And -> compile_shortcut_binop l r env (gensym "and") false compile_expr
-      | Or ->  compile_shortcut_binop l r env (gensym "or")  true  compile_expr
-    end
-  | If (c, t, f) -> (compile_expr c env) 
-    @ check_arg return_register not_a_boolean 
-    @ compile_if compile_expr t f env
-  | Sys (fname, args) ->
-    let params, type_return = sys_lookup fname env in
-    let arity = List.length params in
-    let argc = List.length args in
-    if (argc != arity) 
-      then Fmt.failwith 
-      "Arity mismatch: system function %s expects %d arguments but got %d"
-      fname arity argc
-    else 
-      (* type check *)
-      let compiled_args = List.map (fun e -> compile_expr e env) args in 
+(* -----------------------------------
+  |                UNOPS             |                
+  ------------------------------------*)
+
+(* 
+  -- Compiles unop expressions --
+  They can be Add1, Sub1, Not (boolean unop)
+  To do not, we make a XOR between boolean bit and the var.
+  Bool_bit is a 64-bit value, so it must be moved into a register before use as an operand.
+*)
+let compile_unop (expr: instruction list) (op: unOp): instruction list =
+  match op with
+  | Add1 -> expr @ type_checking ret_reg IntT @ [IAdd (ret_reg, Const 2L)]
+  | Sub1 -> expr @ type_checking ret_reg IntT @ [ISub (ret_reg, Const 2L)]
+  | Not ->  expr @ type_checking ret_reg BoolT @ [IMov (arg_reg, Const bool_bit) ; IXor (ret_reg, arg_reg)]
+
+
+(* -----------------------------------
+  |                BINOPS             |                
+  ------------------------------------*)
+
+(* Shortcut typechecker for binary operations *)
+let check_binops (type_error: arg) =
+  check_arg ret_reg type_error @ check_arg arg_reg type_error
+
+(* Compiles instructions common to binary operators. Moves left argument
+into RAX (ret_reg), and the right one into R11 (arg_reg).*)
+let compile_binop_preamble (l: expr) (r: expr) (env: env)
+  (compiler: expr -> env -> instruction list) : instruction list =
+  let compiled_right = compiler r env in
+  let new_env, loc = extend_env (tmp_gensym ()) env in
+  let compiled_left = compiler l new_env in
+  compiled_right @ [ IMov (loc, ret_reg) ] @ 
+  compiled_left  @ [ IMov (arg_reg, loc) ]
+
+(* Compiles and/or operators *)
+let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
+  (compiler: expr -> env -> instruction list) : instruction list =
+  let compare = [
+    IMov (arg_reg, Const (encode_bool skip_on)) ;
+    ICmp (ret_reg, arg_reg) ; 
+    IJe lbl
+  ] in
+  compiler l env @ check_arg ret_reg not_a_boolean @ compare @ 
+  compiler r env @ check_arg ret_reg not_a_boolean @ compare
+  @ [IMov (ret_reg, Const (encode_bool (not skip_on))) ; ILabel lbl]
+
+(* Compiles < and = comparators *)
+let compile_binop_comparator (cmp_label: string) (inst: instruction) : instruction list =
+  let preamble  =  [
+    ICmp (ret_reg, arg_reg) ; 
+    IMov (ret_reg, Const true_encoding) 
+  ] in 
+  let ending    =  [
+    IMov (ret_reg, Const false_encoding) ; 
+    ILabel cmp_label 
+  ] in 
+  preamble @ [inst] @ ending
+
+(* 
+  Compiles and does the type-checking of arithmetical binop expressions.
+*)
+let comp_and_check_arithmetic_binop (l: expr) (r: expr) (env: env)
+  (compiler: expr -> env -> instruction list) : instruction list = 
+  compile_binop_preamble l r env compiler
+  @ check_binops not_a_number
+
+(* 
+  -- Compiles binop expressions --
+  They can be + - * / < = and or
+  Arithmetical binops (such as + - * /) are derivated to comp_and_check_arithmetic_binop
+*)
+let compile_binop (op: binOp) (l: expr) (r: expr) (env: env)
+  (compiler: expr -> env -> instruction list) : instruction list = 
+  match op with
+    | Add -> comp_and_check_arithmetic_binop l r env compiler
+      @ [IAdd (ret_reg, arg_reg)]
+    | Sub -> comp_and_check_arithmetic_binop l r env compiler
+      @ [ISub (ret_reg, arg_reg)]
+    | Mul -> comp_and_check_arithmetic_binop l r env compiler
+      @ [IMul (ret_reg, arg_reg) ; ISar (ret_reg, Const 1L)]
+    | Div -> comp_and_check_arithmetic_binop l r env compiler
+      @ [ICqo ; IDiv (arg_reg) ; ISal (ret_reg, Const 1L)]
+    | Less -> 
+      let less_lbl = less_gensym () in
+      compile_binop_preamble l r env compiler 
+      @ check_binops not_a_number (* Type Checking *)
+      @ compile_binop_comparator less_lbl (IJl less_lbl)
+    | Eq -> (* Doesn't need a type checking *)
+      let eq_lbl =  equal_gensym () in
+      compile_binop_preamble l r env compiler
+      @ compile_binop_comparator eq_lbl (IJe eq_lbl)
+    (* And & Or have shortucut semantics *)
+    | And -> compile_shortcut_binop l r env (and_gensym ()) false compiler
+    | Or ->  compile_shortcut_binop l r env (or_gensym ())  true  compiler
+
+
+(* -----------------------------------
+  |                 IF               |                
+  ------------------------------------*)
+
+(* Compiles IF expressions *)        
+let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (env: env): instruction list =
+  let false_lbl = if_false_gensym () in
+  let done_lbl  = done_gensym () in 
+  let preamble  = [
+    ICmp (ret_reg, Const false_encoding);
+    IJe  (false_lbl)
+  ] in
+  preamble
+  @ (compile t env)
+  @ [ IJmp (done_lbl); ILabel(false_lbl) ]
+  @ (compile f env)
+  @ [ ILabel (done_lbl) ]
+ 
+
+(* -----------------------------------
+  |        FOREIGN FUNCTIONS (C)      |                
+  ------------------------------------*)
+let compile_sys_call (fname: string) (args: expr list) (env: env)
+  (compilexpr: expr -> env -> instruction list) : instruction list = 
+  let params, type_return = sys_lookup fname env in
+  let arity = List.length params in
+  let argc = List.length args in
+  if (argc != arity) 
+    then Fmt.failwith 
+    "Arity mismatch: system function %s expects %d arguments but got %d"
+    fname arity argc
+  else 
+    (* type check *)
+    let compiled_args = List.map (fun e -> compilexpr e env) args in 
+    let pushed_regs   = List.rev (push_regs arity arg_regs) in
+    let prepare_call  = List.concat 
+    (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
+    let restore_rsp   = if arity > 6 
+      then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+      else [] in
+    let popped_regs   = pop_regs arity arg_regs in
+    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
+    @ type_checking ret_reg type_return
+
+
+(* -----------------------------------
+  |       FIRST ORDER FUNCTIONS      |                
+  ------------------------------------*)
+let compile_fof_call  (fname: string) (args: expr list) (env: env)
+  (compilexpr: expr -> env -> instruction list) : instruction list =  
+  let arity = fun_lookup fname env in
+  let argc = List.length args in
+  if (argc != arity)
+    then Fmt.failwith 
+      "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
+    else
+      let compiled_args = List.map (fun expr -> compilexpr expr env) args in
       let pushed_regs   = List.rev (push_regs arity arg_regs) in
-      let prepare_call  = List.concat 
-      (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
+      let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs false)) in 
       let restore_rsp   = if arity > 6 
         then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
         else [] in
       let popped_regs   = pop_regs arity arg_regs in
-      pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
-      @ type_checking return_register type_return
-  | App (fname, args) ->
-    let arity = fun_lookup fname env in
-    let argc = List.length args in
-    if (argc != arity)
-      then Fmt.failwith 
-        "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
-      else
-        let curry_compile = fun expr -> compile_expr expr env in
-        let compiled_args = List.map curry_compile args in
-        let pushed_regs   = List.rev (push_regs arity arg_regs) in
-        let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs false)) in 
-        let restore_rsp   = if arity > 6 
-          then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
-          else [] in
-        let popped_regs   = pop_regs arity arg_regs in
-        pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs
+      pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs    
+
+
+(* -----------------------------------
+  |                MAIN              |                
+  ------------------------------------*)
+
+(* THE MAIN compiler function *)
+let rec compile_expr (e : expr) (env: env) : instruction list =
+  match e with 
+  | Num n   ->  [ IMov (ret_reg, Const (encode_int n)) ]
+  | Bool p  ->  [ IMov (ret_reg, Const (encode_bool p)) ]
+  | UnOp (op, e)  -> compile_unop (compile_expr e env) op
+  | Id x    ->  [ IMov (ret_reg, let_lookup x env) ]
+  | Let (id,v,b) -> 
+      let (new_env, loc)  = extend_env id env in
+      let compiled_val    = compile_expr v env in
+      let save_val  = [ IMov(loc, ret_reg) ] in
+      compiled_val @ save_val @ (compile_expr b new_env)
+  | BinOp (op, l, r) -> compile_binop op l r env compile_expr
+  | If (c, t, f) -> (compile_expr c env) 
+      @ check_arg ret_reg not_a_boolean 
+      @ compile_if compile_expr t f env
+  | Sys (fname, args) -> compile_sys_call fname args env compile_expr
+  | App (fname, args) -> compile_fof_call fname args env compile_expr
   | Void -> []
 
 
@@ -259,8 +288,8 @@ let stack_offset_for_local (exp: expr): int =
 (* Label for handling errors *)
 let error_handler =
  [ILabel "error_handler";
-  IMov (Reg RSI, error_register);
-  IMov (Reg RDI, error_code_register);
+  IMov (Reg RSI, err_reg);
+  IMov (Reg RDI, err_cod_reg);
   ICall "error"]
 
 (* Callee - Save  @ Init *)
@@ -287,6 +316,7 @@ let rec dupExist lst: 'a =
   | [] -> ""
   | hd::tl -> if (exist hd tl) then hd else dupExist tl
 
+(* Compiles definitions for first order functions *)
 let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
   let _, fenv, senv = env in
@@ -301,6 +331,7 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
     @ [ISub (Reg RSP, Const stack_offset)]
     @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
+(* Compiles a declaration for a function *)
 let compile_declaration (dec: decl) (env: env) 
 (funs: instruction list) (exts: instruction list): instruction list * instruction list =
   match dec with 
@@ -308,6 +339,7 @@ let compile_declaration (dec: decl) (env: env)
     compile_def fname params body env @ funs , exts
   | SysFunDef (fname, _, _) -> funs, [IExtern fname] @ exts
 
+(* Compiles declarations for functions *)  
 let rec compile_declarations (decls: decl list) (env: env) :
 instruction list * instruction list =
   match decls with

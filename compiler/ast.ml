@@ -41,7 +41,6 @@ type expr =
   | BinOp of binOp * expr * expr
   | Let of string * expr * expr
   | If of expr * expr * expr
-  (* | FunApp of string * expr list (* function application *) *)
   | App of string * expr list (* function application *)
   | Sys of string * expr list (* foreign function application *)
   | Void
