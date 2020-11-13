@@ -31,6 +31,9 @@ type binOp =
   | (and <expr> <expr>)
   | (or  <expr> <expr>)
   | (if  <expr> <expr> <expr> )
+  | (IDENTIFIER (<expr>)* )
+  | (tup <expr> ... <expr> )
+  | (get <expr> <expr> )
 *)
 
 type expr = 
@@ -40,15 +43,18 @@ type expr =
   | UnOp of unOp * expr
   | BinOp of binOp * expr * expr
   | Let of string * expr * expr
-  | If of expr * expr * expr
-  | App of string * expr list (* function application *)
+  | If  of expr * expr * expr
+  | App of string * expr list (* first order function application *)
   | Sys of string * expr list (* foreign function application *)
+  | Tuple of expr list      (* Components of the tuple *)
+(*  | Get of expr * expr   *)   (* Tuple, desired index *)
   | Void
 
 (* data type *)
 type dtype =
   | IntT
   | BoolT
+  | TupleT
   | AnyT
 
 type decl =
@@ -92,25 +98,24 @@ let rec pp_expr fmt =
   | Num n -> int64 fmt n
   | Bool b -> bool fmt b
   | Id x -> string fmt x
-  | UnOp (op, e) -> pf fmt "(%a %a)" pp_unop op pp_expr e
-  | BinOp (op, x1, x2) -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
-  | Let (x,v,b) -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
-  | If (c, t, f) -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
-  | App (fname, exprs) -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs
-  | Sys (fname, exprs) -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
+  | UnOp (op, e)        -> pf fmt "(%a %a)" pp_unop op pp_expr e
+  | BinOp (op, x1, x2)  -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
+  | Let (x,v,b)         -> pf fmt "(let (%a %a) %a)" string x pp_expr v pp_expr b
+  | If (c, t, f)        -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
+  | App (fname, exprs)  -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs
+  | Sys (fname, exprs)  -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
+  | Tuple exprs         -> pf fmt "(tup %a)" (pp_expr_list pp_expr) exprs
+  (* | Get (t,index)       -> pf fmt "(get %a %a)" pp_expr t pp_expr index *)
   | Void -> pf fmt "<void>"
-  (*
-  | FunDef (fname, params, body) ->
-    pf fmt "(def (%a %a) %a)" string fname (pp_expr_list pp_expr) params pp_expr body
-  | FunApp (fname, args) -> 
-    pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) args
-  *)
+
 
 let pp_dtype fmt =
   function
   | IntT -> pf fmt "int"
   | BoolT -> pf fmt "bool"
+  | TupleT -> pf fmt "tuple"
   | AnyT -> pf fmt  "any"
+
 
 let pp_decl fmt =
   function

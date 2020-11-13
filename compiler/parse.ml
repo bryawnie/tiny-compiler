@@ -71,6 +71,8 @@ let rec parse_expr (sexp : sexp) : expr =
     Let (id, parse_expr e, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
+  | `List (`Atom "tup"::args) -> 
+    Tuple (List.map parse_expr args)
   | `List (`Atom "@sys"::(`Atom fname::args)) -> 
     Sys (fname, List.map parse_expr args)
   | `List (`Atom fname::args) -> 

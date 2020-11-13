@@ -149,6 +149,7 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
     end
   | Void -> NumV 0L (* This is supposed to do nothing *)
   | Sys (_,_) -> Fmt.failwith "Error: System functions not supported in Interpreter."
+  | Tuple _ -> Fmt.failwith "Error: Not implemented"
 
 let rec fenv_from_decls (ds: decl list) (fenv: fenv): fenv =
   match ds with

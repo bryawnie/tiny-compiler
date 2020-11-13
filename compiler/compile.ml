@@ -15,6 +15,7 @@ let ret_reg = Reg RAX
 let arg_reg = Reg R11
 let err_cod_reg = Reg RBX
 let err_reg = Reg RCX
+let heap_reg = R15
 let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
 ]
@@ -22,20 +23,22 @@ let arg_regs = [
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
+let not_a_tuple = Const 3L
 
-(* Type Checker for a register and a type expected *)
-let check_arg (register: arg) (type_error: arg) : instruction list =
-  [IMov (err_cod_reg, type_error)] @
-  [IMov (err_reg, register)] @
-  [ITest (err_reg, Const 1L)] @
-  if type_error == not_a_number then
-  [IJnz "error_handler"] else [IJz "error_handler"]
 
 (* This function handles the request for a type checking *)
 let type_checking (register: arg) (type_expected: dtype): instruction list =
+  let prelude (type_error) = [IMov (err_cod_reg, type_error) ; IMov (err_reg, register)] in
   match type_expected with
-  | IntT -> check_arg register not_a_number
-  | BoolT -> check_arg register not_a_boolean
+  | IntT -> 
+    prelude (not_a_number)  @ [ITest (err_reg, Const 1L) ; IJnz "error_handler"]
+  | BoolT -> 
+    prelude (not_a_boolean) @
+    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] @ (* Not Integer *)
+    [ITest (err_reg, Const 7L) ; IJz  "error_handler"]
+  | TupleT -> 
+    prelude (not_a_tuple) @
+    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] 
   | AnyT -> [] 
   
 (* Returns the instruction list to backup the necesary registers before a function call *)
@@ -90,8 +93,8 @@ let compile_unop (expr: instruction list) (op: unOp): instruction list =
   ------------------------------------*)
 
 (* Shortcut typechecker for binary operations *)
-let check_binops (type_error: arg) =
-  check_arg ret_reg type_error @ check_arg arg_reg type_error
+let check_binops (type_error: dtype) =
+  type_checking ret_reg type_error @ type_checking arg_reg type_error
 
 (* Compiles instructions common to binary operators. Moves left argument
 into RAX (ret_reg), and the right one into R11 (arg_reg).*)
@@ -111,8 +114,8 @@ let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on
     ICmp (ret_reg, arg_reg) ; 
     IJe lbl
   ] in
-  compiler l env @ check_arg ret_reg not_a_boolean @ compare @ 
-  compiler r env @ check_arg ret_reg not_a_boolean @ compare
+  compiler l env @ type_checking ret_reg BoolT @ compare @ 
+  compiler r env @ type_checking ret_reg BoolT @ compare
   @ [IMov (ret_reg, Const (encode_bool (not skip_on))) ; ILabel lbl]
 
 (* Compiles < and = comparators *)
@@ -133,7 +136,7 @@ let compile_binop_comparator (cmp_label: string) (inst: instruction) : instructi
 let comp_and_check_arithmetic_binop (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list = 
   compile_binop_preamble l r env compiler
-  @ check_binops not_a_number
+  @ check_binops IntT
 
 (* 
   -- Compiles binop expressions --
@@ -154,7 +157,7 @@ let compile_binop (op: binOp) (l: expr) (r: expr) (env: env)
     | Less -> 
       let less_lbl = less_gensym () in
       compile_binop_preamble l r env compiler 
-      @ check_binops not_a_number (* Type Checking *)
+      @ check_binops IntT (* Type Checking *)
       @ compile_binop_comparator less_lbl (IJl less_lbl)
     | Eq -> (* Doesn't need a type checking *)
       let eq_lbl =  equal_gensym () in
@@ -230,6 +233,35 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
       let popped_regs   = pop_regs arity arg_regs in
       pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs    
 
+(* -----------------------------------
+  |              TUPLES              |                
+  ------------------------------------*)
+let comp_tuple_elem (index: int) (exp: expr) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list =
+  let compiled_element = compilexpr exp env in
+  compiled_element @ [IMov (RegOffset (heap_reg, index), ret_reg)]
+
+let rec comp_tuple_elems (elems: expr list) (env: env) (index: int)
+  (compilexpr: expr -> env -> instruction list) : instruction list =
+  match elems with
+  | [] -> []
+  | el::tail -> comp_tuple_elem index el env compilexpr @ comp_tuple_elems tail env (index + 1) compilexpr
+
+let compile_tuple (elems: expr list) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list = 
+  let assign_elements = comp_tuple_elems elems env 1 compilexpr in 
+  let size = List.length elems in
+  [IMov (RegOffset (heap_reg, 0), Const (Int64.of_int size))] @ assign_elements @
+  [
+    IMov (ret_reg, Reg heap_reg);     (* Start creating the tuple value itself *)
+    IAdd (ret_reg, Const 1L);         (* Tag the tuple *)
+    IAdd (Reg heap_reg, Const (Int64.of_int (size*8 + 8 ))) (* Bump the heap pointer *)
+  ]
+  @ if (size+1) mod 2 = 1 then
+    [IAdd (Reg heap_reg, Const 8L)]
+  else []
+  @ type_checking ret_reg TupleT
+
 
 (* -----------------------------------
   |                MAIN              |                
@@ -249,10 +281,12 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       compiled_val @ save_val @ (compile_expr b new_env)
   | BinOp (op, l, r) -> compile_binop op l r env compile_expr
   | If (c, t, f) -> (compile_expr c env) 
-      @ check_arg ret_reg not_a_boolean 
+      @ type_checking ret_reg BoolT 
       @ compile_if compile_expr t f env
   | Sys (fname, args) -> compile_sys_call fname args env compile_expr
   | App (fname, args) -> compile_fof_call fname args env compile_expr
+  | Tuple exprs -> compile_tuple exprs env compile_expr
+  (* | Get (tup, index) -> []  *)
   | Void -> []
 
 
@@ -275,6 +309,8 @@ let rec varcount (e:expr): int =
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
   | App (_, args_ex) -> max_list (List.map varcount args_ex)
   | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
+  | Tuple exprs -> max_list (List.map varcount exprs)
+  (* | Get (tup, index) -> 0  *)
   | Void -> 0
 
 (* 
@@ -364,9 +400,14 @@ extern error
 %a
 global our_code_starts_here
 our_code_starts_here:
+%a
+  mov  R15, RSI                 ;; load R15 with the passed HEAP
+  add  R15, 7                   ;; Add 7 to the next multiple of 7
+  mov  R11, 0xfffffffffffffff8  ;; R11 is now 11111...1000
+  and  R15, R11                 ;; Round back down
 %a" 
-      pp_instrs externs pp_instrs (callee_prologue 
-      @ [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
+      pp_instrs externs pp_instrs callee_prologue pp_instrs (
+      [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
       @ error_handler @ functions)
 
 (* The Pipeline *)

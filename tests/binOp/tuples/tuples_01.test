@@ -1,0 +1,7 @@
+NAME: Implementing tuples
+DESCRIPTION: Tuple definition
+SRC:
+(defsys print any -> any)
+(tup (@sys print 1) 2)
+EXPECTED:
+(tup 1 2 3 4 5)

@@ -14,6 +14,7 @@ type reg =
 | R9    (* 6th Param      |   R *)
 | R10   (*                |   R *)
 | R11   (* Temp Register  |   R *)
+| R15   (* HEAP Register  |   E *)
 (* 
 | R12
 | R13
@@ -74,6 +75,7 @@ let pp_reg : reg Fmt.t =
     | R9  -> Fmt.string fmt "R9"
     | R10 -> Fmt.string fmt "R10"
     | R11 -> Fmt.string fmt "R11"
+    | R15 -> Fmt.string fmt "R15"
 
 
 (* A pretty printing for args *)
@@ -82,8 +84,13 @@ let pp_arg : arg Fmt.t =
     match arg with
     | Const n         -> Fmt.pf fmt "%#Lx" n
     | Reg r           -> pp_reg fmt r
-    | RegOffset (r,i) -> Fmt.pf fmt "[%a - %a]" pp_reg r Fmt.int (8*i)
-
+    | RegOffset (r,i) -> 
+      if i > 0 then
+        Fmt.pf fmt "qword[%a + %a]" pp_reg r Fmt.int (8*i)
+      else if i <0 then
+        Fmt.pf fmt "qword[%a - %a]" pp_reg r Fmt.int (8*(-i))
+      else  
+        Fmt.pf fmt "qword[%a]" pp_reg r
 
 (* A pretty printing for instruction *)
 let pp_instr : instruction Fmt.t =
