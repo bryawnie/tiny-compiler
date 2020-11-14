@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef uint64_t val;   // any value
 typedef int64_t int_v;  // signed integer
 typedef uint64_t bool_v;// boolean
 
-extern val our_code_starts_here() asm("our_code_starts_here");
+extern val our_code_starts_here(uint64_t * HEAP) asm("our_code_starts_here");
 
 
 /* Bitmasks */
@@ -20,29 +22,64 @@ const val BOOL_FALSE = 0x0000000000000007;
 
 const int ERR_NOT_NUMBER = 1;
 const int ERR_NOT_BOOLEAN = 2;
+const int ERR_NOT_TUPLE = 3;
 
-char * value_to_str(val v){
+char * strtuple(int *p){
+  int size = *p;
+  char * strtmp = (char *) malloc(30*sizeof(char));
+  char * tupStr = (char *) malloc(30*sizeof(char));
+  sprintf(tupStr, "(tup");
+  for (int i=1; i<=size;i++){
+    sprintf(strtmp, " %ld", (int_v) *(p+2*i) >> 1 );
+    strcat(tupStr, strtmp);
+  }
+  free(strtmp);
+  strcat(tupStr,")");
+  return tupStr;
+}
+
+char * strintval(val v){
   char * strOut = (char *) malloc(30*sizeof(char));
-  if (!(v & INT_BITMASK)) { // integer
-    sprintf(strOut, "%ld", (int_v) v >> 1);
-    return strOut;
-  } else if (v == BOOL_TRUE) {
-    return "true";
-  } else if (v == BOOL_FALSE) {
-    return "false";
+  sprintf(strOut, "%ld", (int_v) v >> 1);
+  return strOut;
+}
+
+char * strval(val v){
+  char * strOut = (char *) malloc(30*sizeof(char));
+  int lastBits = v & 7;
+  int lastBit = v & 1;
+  int dir = v & 0xfffffffffffffff8;
+  if(!lastBit){
+    return strintval(v);
   } else {
-    sprintf(strOut, "Unknown value: %#018lx", v);
-    return strOut;
+    switch (lastBits){
+      case 7: // Boolean
+        if (v == BOOL_TRUE) 
+          return "true";
+        return "false";
+      case 1: // Tuple¿
+        return strtuple((val *) dir);
+      default:
+        sprintf(strOut, "Unknown value: %#018lx", v);
+        return strOut;
+    }
   }
 }
 
 void error(int errCode, val v) {
-  if (errCode == ERR_NOT_NUMBER) {
-    fprintf(stderr, "Expected number, but got %s\n", value_to_str(v));
-  } else if (errCode == ERR_NOT_BOOLEAN) {
-    fprintf(stderr, "Expected boolean, but got %s\n", value_to_str(v));
-  } else {
+  switch (errCode){
+  case ERR_NOT_NUMBER:
+    fprintf(stderr, "Expected number, but got %s\n", strval(v));
+    break;
+  case ERR_NOT_BOOLEAN:
+    fprintf(stderr, "Expected boolean, but got %s\n", strval(v));
+    break;
+  case ERR_NOT_TUPLE:
+    fprintf(stderr, "Expected tuple, but got %s\n", strval(v));
+    break;
+  default:
     fprintf(stderr, "Unknown error code: %d", errCode);
+    break;
   }
   exit(errCode);
 }
@@ -77,7 +114,7 @@ val min_of_8(val v1, val v2, val v3, val v4, val v5, val v6, val v7, val v8){
 int main(int argc, char** argv) {
   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
   val result = our_code_starts_here(HEAP);
-  printf(value_to_str(result));
+  printf(strval(result));
   free(HEAP);
   return 0;
 }

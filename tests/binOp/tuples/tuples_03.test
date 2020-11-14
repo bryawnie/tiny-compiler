@@ -1,0 +1,6 @@
+NAME: Implementing lets with tuples
+DESCRIPTION: Let tuple
+SRC:
+(let (t (tup 1 2 3)) t)
+EXPECTED:
+(tup 1 2 3)
