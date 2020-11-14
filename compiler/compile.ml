@@ -24,6 +24,8 @@ let arg_regs = [
 let not_a_number = Const 1L
 let not_a_boolean = Const 2L 
 let not_a_tuple = Const 3L
+let neg_index = Const 4L
+let index_overflow = Const 5L
 
 
 (* This function handles the request for a type checking *)
@@ -38,7 +40,8 @@ let type_checking (register: arg) (type_expected: dtype): instruction list =
     [ITest (err_reg, Const 7L) ; IJz  "error_handler"]
   | TupleT -> 
     prelude (not_a_tuple) @
-    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] 
+    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] @ (* Not Integer *)
+    [ITest (err_reg, Const 6L) ; IJnz  "error_handler"]
   | AnyT -> [] 
   
 (* Returns the instruction list to backup the necesary registers before a function call *)
@@ -236,17 +239,20 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
 (* -----------------------------------
   |              TUPLES              |                
   ------------------------------------*)
+(* Compiles and add an element to tuple *)
 let comp_tuple_elem (index: int) (exp: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list =
   let compiled_element = compilexpr exp env in
   compiled_element @ [IMov (RegOffset (heap_reg, index), ret_reg)]
 
+(* Compiles and add the elements *)
 let rec comp_tuple_elems (elems: expr list) (env: env) (index: int)
   (compilexpr: expr -> env -> instruction list) : instruction list =
   match elems with
   | [] -> []
   | el::tail -> comp_tuple_elem index el env compilexpr @ comp_tuple_elems tail env (index + 1) compilexpr
 
+(* Compiles a tuple *)
 let compile_tuple (elems: expr list) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let assign_elements = comp_tuple_elems elems env 1 compilexpr in 
@@ -262,6 +268,37 @@ let compile_tuple (elems: expr list) (env: env)
   else []
   @ type_checking ret_reg TupleT
 
+(* -----------------------------------
+  |               GET                |                
+  ------------------------------------*)
+(* Checks positive index and avoid overflows *)
+let check_index (index: arg) : instruction list =
+  [ (* Negative Index Error *)
+    IMov (err_cod_reg, neg_index) ; 
+    IMov (err_reg, index) ;
+    ICmp (index, Const 0L);     
+    IJl  "error_handler";
+  ] @ [ (* Index out of bounds *)
+    IMov (err_cod_reg, index_overflow) ; 
+    ICmp (index, RegOffset (RAX, 0)); 
+    IJge "error_handler";
+  ]
+
+(* Compiles get expressions *)
+let compile_get (tup: expr) (index: expr) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list = 
+  let comp_ind = compilexpr index env in
+  let comp_tup = compilexpr tup env in
+  let check_index_t = type_checking ret_reg IntT in
+  let check_tuple_t = type_checking ret_reg TupleT in 
+  comp_ind @ check_index_t @ [IMov (arg_reg, ret_reg)] @ comp_tup @ check_tuple_t @
+  [ ISub (ret_reg, Const 1L) ; ISar (arg_reg, Const 1L) ] @ check_index arg_reg @
+  [ 
+    IAdd (arg_reg, Const 1L);     (* Index + 1 *)
+    IMul (arg_reg, Const 8L);     (* Index * 8 *)
+    IAdd (ret_reg, arg_reg);      (* RAX + 8*(i+1) *)
+    IMov (ret_reg, RegOffset (RAX, 0))
+  ]
 
 (* -----------------------------------
   |                MAIN              |                
@@ -286,7 +323,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Sys (fname, args) -> compile_sys_call fname args env compile_expr
   | App (fname, args) -> compile_fof_call fname args env compile_expr
   | Tuple exprs -> compile_tuple exprs env compile_expr
-  (* | Get (tup, index) -> []  *)
+  | Get (tup, index) -> compile_get tup index env compile_expr
   | Void -> []
 
 
@@ -310,7 +347,7 @@ let rec varcount (e:expr): int =
   | App (_, args_ex) -> max_list (List.map varcount args_ex)
   | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
   | Tuple exprs -> max_list (List.map varcount exprs)
-  (* | Get (tup, index) -> 0  *)
+  | Get (tuple, index) -> max (varcount tuple) (varcount index)
   | Void -> 0
 
 (* 

@@ -47,7 +47,7 @@ type expr =
   | App of string * expr list (* first order function application *)
   | Sys of string * expr list (* foreign function application *)
   | Tuple of expr list      (* Components of the tuple *)
-(*  | Get of expr * expr   *)   (* Tuple, desired index *)
+  | Get of expr * expr      (* Tuple, desired index *)
   | Void
 
 (* data type *)
@@ -105,7 +105,7 @@ let rec pp_expr fmt =
   | App (fname, exprs)  -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs
   | Sys (fname, exprs)  -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
   | Tuple exprs         -> pf fmt "(tup %a)" (pp_expr_list pp_expr) exprs
-  (* | Get (t,index)       -> pf fmt "(get %a %a)" pp_expr t pp_expr index *)
+  | Get (t,index)       -> pf fmt "(get %a %a)" pp_expr t pp_expr index
   | Void -> pf fmt "<void>"
 
 

@@ -23,6 +23,8 @@ const val BOOL_FALSE = 0x0000000000000007;
 const int ERR_NOT_NUMBER = 1;
 const int ERR_NOT_BOOLEAN = 2;
 const int ERR_NOT_TUPLE = 3;
+const int ERR_NEG_INDEX = 4;
+const int ERR_INDEX_OVERFLOW = 5;
 
 char * strtuple(int *p){
   int size = *p;
@@ -76,6 +78,12 @@ void error(int errCode, val v) {
     break;
   case ERR_NOT_TUPLE:
     fprintf(stderr, "Expected tuple, but got %s\n", strval(v));
+    break;
+  case ERR_NEG_INDEX:
+    fprintf(stderr, "Unexpected negative index %ld\n", (int_v) v);
+    break;
+  case ERR_INDEX_OVERFLOW:
+    fprintf(stderr, "Index out of bounds %ld\n", (int_v) v);
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);

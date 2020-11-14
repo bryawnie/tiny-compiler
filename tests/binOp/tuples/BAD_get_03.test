@@ -1,0 +1,7 @@
+NAME: Not a tuple
+DESCRIPTION: Tuple definition
+STATUS: RT error
+SRC:
+(get true 5)
+EXPECTED:
+Expected tuple, but got true
