@@ -33,15 +33,15 @@ let type_checking (register: arg) (type_expected: dtype): instruction list =
   let prelude (type_error) = [IMov (err_cod_reg, type_error) ; IMov (err_reg, register)] in
   match type_expected with
   | IntT -> 
-    prelude (not_a_number)  @ [ITest (err_reg, Const 1L) ; IJnz "error_handler"]
+    prelude (not_a_number)  @ [ITest (err_reg, Const 1L) ; IJnz "error_type_handler"]
   | BoolT -> 
     prelude (not_a_boolean) @
-    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] @ (* Not Integer *)
-    [ITest (err_reg, Const 7L) ; IJz  "error_handler"]
+    [IAnd  (err_reg, Const 1L)] @ (* Not Integer *)
+    [ITest (err_reg, Const 7L) ; IJz  "error_type_handler"]
   | TupleT -> 
     prelude (not_a_tuple) @
-    [ITest (err_reg, Const 1L) ; IJz  "error_handler"] @ (* Not Integer *)
-    [ITest (err_reg, Const 6L) ; IJnz  "error_handler"]
+    [ITest (err_reg, Const 1L) ; IJz  "error_type_handler"] @ (* Not Integer *)
+    [ITest (err_reg, Const 6L) ; IJnz  "error_type_handler"]
   | AnyT -> [] 
   
 (* Returns the instruction list to backup the necesary registers before a function call *)
@@ -95,19 +95,15 @@ let compile_unop (expr: instruction list) (op: unOp): instruction list =
   |                BINOPS             |                
   ------------------------------------*)
 
-(* Shortcut typechecker for binary operations *)
-let check_binops (type_error: dtype) =
-  type_checking ret_reg type_error @ type_checking arg_reg type_error
-
 (* Compiles instructions common to binary operators. Moves left argument
 into RAX (ret_reg), and the right one into R11 (arg_reg).*)
-let compile_binop_preamble (l: expr) (r: expr) (env: env)
+let compile_binop_preamble (l: expr) (typeL: dtype) (r: expr) (typeR: dtype) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =
-  let compiled_right = compiler r env in
+  let compiled_left = compiler l env in
   let new_env, loc = extend_env (tmp_gensym ()) env in
-  let compiled_left = compiler l new_env in
-  compiled_right @ [ IMov (loc, ret_reg) ] @ 
-  compiled_left  @ [ IMov (arg_reg, loc) ]
+  let compiled_right = compiler r new_env in
+  compiled_left  @ type_checking ret_reg typeL @ [ IMov (loc, ret_reg) ] @
+  compiled_right @ type_checking ret_reg typeR @ [ IMov (arg_reg, ret_reg) ] @ [ IMov (ret_reg, loc) ]
 
 (* Compiles and/or operators *)
 let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on: bool)
@@ -134,14 +130,6 @@ let compile_binop_comparator (cmp_label: string) (inst: instruction) : instructi
   preamble @ [inst] @ ending
 
 (* 
-  Compiles and does the type-checking of arithmetical binop expressions.
-*)
-let comp_and_check_arithmetic_binop (l: expr) (r: expr) (env: env)
-  (compiler: expr -> env -> instruction list) : instruction list = 
-  compile_binop_preamble l r env compiler
-  @ check_binops IntT
-
-(* 
   -- Compiles binop expressions --
   They can be + - * / < = and or
   Arithmetical binops (such as + - * /) are derivated to comp_and_check_arithmetic_binop
@@ -149,22 +137,21 @@ let comp_and_check_arithmetic_binop (l: expr) (r: expr) (env: env)
 let compile_binop (op: binOp) (l: expr) (r: expr) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list = 
   match op with
-    | Add -> comp_and_check_arithmetic_binop l r env compiler
+    | Add -> compile_binop_preamble l IntT r IntT env compiler
       @ [IAdd (ret_reg, arg_reg)]
-    | Sub -> comp_and_check_arithmetic_binop l r env compiler
+    | Sub -> compile_binop_preamble l IntT r IntT env compiler
       @ [ISub (ret_reg, arg_reg)]
-    | Mul -> comp_and_check_arithmetic_binop l r env compiler
+    | Mul -> compile_binop_preamble l IntT r IntT env compiler
       @ [IMul (ret_reg, arg_reg) ; ISar (ret_reg, Const 1L)]
-    | Div -> comp_and_check_arithmetic_binop l r env compiler
+    | Div -> compile_binop_preamble l IntT r IntT env compiler
       @ [ICqo ; IDiv (arg_reg) ; ISal (ret_reg, Const 1L)]
     | Less -> 
       let less_lbl = less_gensym () in
-      compile_binop_preamble l r env compiler 
-      @ check_binops IntT (* Type Checking *)
+      compile_binop_preamble l IntT r IntT env compiler 
       @ compile_binop_comparator less_lbl (IJl less_lbl)
     | Eq -> (* Doesn't need a type checking *)
       let eq_lbl =  equal_gensym () in
-      compile_binop_preamble l r env compiler
+      compile_binop_preamble l AnyT r AnyT env compiler
       @ compile_binop_comparator eq_lbl (IJe eq_lbl)
     (* And & Or have shortucut semantics *)
     | And -> compile_shortcut_binop l r env (and_gensym ()) false compiler
@@ -277,11 +264,11 @@ let check_index (index: arg) : instruction list =
     IMov (err_cod_reg, neg_index) ; 
     IMov (err_reg, index) ;
     ICmp (index, Const 0L);     
-    IJl  "error_handler";
+    IJl  "error_index_handler";
   ] @ [ (* Index out of bounds *)
     IMov (err_cod_reg, index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
-    IJge "error_handler";
+    IJge "error_index_handler";
   ]
 
 (* Compiles get expressions *)
@@ -359,11 +346,17 @@ let stack_offset_for_local (exp: expr): int =
   if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
 
 (* Label for handling errors *)
-let error_handler =
- [ILabel "error_handler";
-  IMov (Reg RSI, err_reg);
+let error_type_handler =
+ [ILabel "error_type_handler";
+  IMov (Reg RSI, ret_reg);
   IMov (Reg RDI, err_cod_reg);
   ICall "error"]
+
+let error_index_handler =
+  [ILabel "error_index_handler";
+    IMov (Reg RSI, err_reg);
+    IMov (Reg RDI, err_cod_reg);
+    ICall "error"]
 
 (* Callee - Save  @ Init *)
 let callee_prologue = [
@@ -445,7 +438,7 @@ our_code_starts_here:
 %a" 
       pp_instrs externs pp_instrs callee_prologue pp_instrs (
       [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
-      @ error_handler @ functions)
+      @ error_type_handler @ error_index_handler @ functions)
 
 (* The Pipeline *)
 let compile_src = 

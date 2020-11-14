@@ -4,7 +4,7 @@ SRC:
 (defsys print any -> any)
 (@sys print (+ (@sys print 5) (@sys print -3)))
 EXPECTED:
-> -3
 > 5
+> -3
 > 2
 2
