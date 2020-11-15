@@ -1,4 +1,4 @@
 (library
  (name compiler)
- (modules parse asm ast interp compile env encode)
+ (modules parse asm ast interp compile env encode gensym)
  (libraries containers fmt))

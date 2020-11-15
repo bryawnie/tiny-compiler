@@ -10,7 +10,7 @@ type memloc =
 let memloc_to_arg (m: memloc) : arg =
   match m with
   | MReg r -> Asm.Reg r
-  | StackOffset n -> Asm.RegOffset (RBP, n)
+  | StackOffset n -> Asm.RegOffset (RBP, -n)
 
 let pp_memloc fmt loc =
   match loc with

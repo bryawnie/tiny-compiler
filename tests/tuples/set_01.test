@@ -1,0 +1,7 @@
+NAME: Set Tulple
+DESCRIPTION: Tuples
+SRC:
+(let (t (tup 1 2 3))
+    (set t 1 45))
+EXPECTED:
+(tup 1 45 3)

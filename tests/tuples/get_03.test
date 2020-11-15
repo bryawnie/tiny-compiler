@@ -1,0 +1,6 @@
+NAME: Third element
+DESCRIPTION: Tuple definition
+SRC:
+(get (tup 1 2 3 4 5) 2)
+EXPECTED:
+3

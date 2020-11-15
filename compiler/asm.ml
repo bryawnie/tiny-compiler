@@ -6,14 +6,15 @@ type reg =
 | RBX   (*                |   E *)
 | RCX   (* 4th Param      |   R *)
 | RDX   (* 3rd Param      |   R *)
-| RSI   (* 1st Param      |   R *)
-| RDI   (* 2nd Param      |   R *)
+| RSI   (* 2nd Param      |   R *)
+| RDI   (* 1st Param      |   R *)
 | RSP   (* Stack Pointer  |   R *)
 | RBP   (* Base Pointer   |   E *)
 | R8    (* 5th Param      |   R *)
 | R9    (* 6th Param      |   R *)
 | R10   (*                |   R *)
 | R11   (* Temp Register  |   R *)
+| R15   (* HEAP Register  |   E *)
 (* 
 | R12
 | R13
@@ -47,6 +48,8 @@ type instruction =
 | IJnz of string      (* Jumps if not zero *)
 | IJz of string       (* Jumps if zero *)
 | IJl  of string      (* Jumps if less than *)
+| IJg of string       (* Jumps if greater than *)
+| IJge of string      (* Jumps if greater or equal than *)
 | IJmp of string      (* Makes a jump *)
 | ICall of string     (* Calls a function *)
 | ILabel of string    (* Simple Label *)
@@ -74,6 +77,7 @@ let pp_reg : reg Fmt.t =
     | R9  -> Fmt.string fmt "R9"
     | R10 -> Fmt.string fmt "R10"
     | R11 -> Fmt.string fmt "R11"
+    | R15 -> Fmt.string fmt "R15"
 
 
 (* A pretty printing for args *)
@@ -82,8 +86,13 @@ let pp_arg : arg Fmt.t =
     match arg with
     | Const n         -> Fmt.pf fmt "%#Lx" n
     | Reg r           -> pp_reg fmt r
-    | RegOffset (r,i) -> Fmt.pf fmt "[%a - %a]" pp_reg r Fmt.int (8*i)
-
+    | RegOffset (r,i) -> 
+      if i > 0 then
+        Fmt.pf fmt "qword[%a + %a]" pp_reg r Fmt.int (8*i)
+      else if i <0 then
+        Fmt.pf fmt "qword[%a - %a]" pp_reg r Fmt.int (8*(-i))
+      else  
+        Fmt.pf fmt "qword[%a]" pp_reg r
 
 (* A pretty printing for instruction *)
 let pp_instr : instruction Fmt.t =
@@ -102,6 +111,8 @@ let pp_instr : instruction Fmt.t =
   | IJz  lbl      -> Fmt.pf fmt "  jz   %a" Fmt.string lbl
   | IJnz lbl      -> Fmt.pf fmt "  jnz  %a" Fmt.string lbl
   | IJl  lbl      -> Fmt.pf fmt "  jl   %a" Fmt.string lbl
+  | IJge lbl      -> Fmt.pf fmt "  jge  %a" Fmt.string lbl
+  | IJg  lbl      -> Fmt.pf fmt "  jg   %a" Fmt.string lbl
   | IJmp lbl      -> Fmt.pf fmt "  jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | ICqo          -> Fmt.pf fmt "  cqo" 

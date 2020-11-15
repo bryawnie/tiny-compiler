@@ -1,0 +1,7 @@
+NAME: Index out of bounds
+DESCRIPTION: Tuple definition
+STATUS: RT error
+SRC:
+(get (tup 1 2 3 4 5) 5)
+EXPECTED:
+Index out of bounds 5

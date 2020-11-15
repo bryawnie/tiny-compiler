@@ -1,0 +1,6 @@
+NAME: Implementing empty tuple
+DESCRIPTION: Tuple definition
+SRC:
+(tup)
+EXPECTED:
+(tup)

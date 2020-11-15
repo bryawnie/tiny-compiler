@@ -3,8 +3,8 @@ DESCRIPTION: check that functions have correct scoping
 STATUS: CT error
 SRC:
 (def (sum3 x y z)
-  (+ a (+ b c)))
+  (+ (+ a b) c))
 
 (+ x 5)
 EXPECTED:
-Unbound identifier: c
+Unbound identifier: a

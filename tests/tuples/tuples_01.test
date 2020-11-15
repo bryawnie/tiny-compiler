@@ -1,0 +1,6 @@
+NAME: Implementing tuples
+DESCRIPTION: Tuple definition
+SRC:
+(tup 1 2 3 4 5)
+EXPECTED:
+(tup 1 2 3 4 5)
