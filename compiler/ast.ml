@@ -48,7 +48,8 @@ type expr =
   | Sys of string * expr list (* foreign function application *)
   | Tuple of expr list      (* Components of the tuple *)
   | Get of expr * expr      (* Tuple, desired index *)
-  (* | Set of expr * expr * expr *)
+  | Set of expr * expr * expr
+  | Length of expr          (* Length of a tuple *)
   | Void 
 
 (* data type *)
@@ -107,7 +108,8 @@ let rec pp_expr fmt =
   | Sys (fname, exprs)  -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
   | Tuple exprs         -> pf fmt "(tup %a)" (pp_expr_list pp_expr) exprs
   | Get (t, index)      -> pf fmt "(get %a %a)" pp_expr t pp_expr index
-  (* | Set (t, index, v)   -> pf fmt "(set %a %a %a)" pp_expr t pp_expr index pp_expr v *)
+  | Set (t, index, v)   -> pf fmt "(set %a %a %a)" pp_expr t pp_expr index pp_expr v
+  | Length t            -> pf fmt "(len %a)" pp_expr t
   | Void -> pf fmt "<void>"
 
 

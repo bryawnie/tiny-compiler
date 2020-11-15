@@ -244,7 +244,7 @@ let compile_tuple (elems: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let assign_elements = comp_tuple_elems elems env 1 compilexpr in 
   let size = List.length elems in
-  [IMov (RegOffset (heap_reg, 0), Const (Int64.of_int size))] @ assign_elements @
+  [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ assign_elements @
   [
     IMov (ret_reg, Reg heap_reg);     (* Start creating the tuple value itself *)
     IAdd (ret_reg, Const 1L);         (* Tag the tuple *)
@@ -268,24 +268,58 @@ let check_index (index: arg) : instruction list =
   ] @ [ (* Index out of bounds *)
     IMov (err_cod_reg, index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
-    IJge "error_index_handler";
+    IJg "error_index_handler";
   ]
 
 (* Compiles get expressions *)
 let compile_get (tup: expr) (index: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let comp_ind = compilexpr index env in
-  let comp_tup = compilexpr tup env in
+  let env1, loc_idx = extend_env (tmp_gensym ()) env in
+  let comp_tup = compilexpr tup env1 in
   let check_index_t = type_checking ret_reg IntT in
   let check_tuple_t = type_checking ret_reg TupleT in 
-  comp_ind @ check_index_t @ [IMov (arg_reg, ret_reg)] @ comp_tup @ check_tuple_t @
-  [ ISub (ret_reg, Const 1L) ; ISar (arg_reg, Const 1L) ] @ check_index arg_reg @
+  comp_ind @ check_index_t @ [IAdd (ret_reg, Const 2L); IMov (loc_idx, ret_reg)] @ 
+  comp_tup @ check_tuple_t @
   [ 
-    IAdd (arg_reg, Const 1L);     (* Index + 1 *)
+    ISub (ret_reg, Const 1L) ; 
+    IMov (arg_reg, loc_idx) 
+  ] @ check_index arg_reg @
+  [ 
+    ISar (arg_reg, Const 1L);
     IMul (arg_reg, Const 8L);     (* Index * 8 *)
     IAdd (ret_reg, arg_reg);      (* RAX + 8*(i+1) *)
     IMov (ret_reg, RegOffset (RAX, 0))
   ]
+
+let compile_set (tup: expr) (index: expr) (value: expr) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list = 
+  let comp_val = compilexpr value env in
+  let env1, loc_val = extend_env (tmp_gensym ()) env in
+  let comp_ind = compilexpr index env1 in
+  let env2, loc_idx = extend_env (tmp_gensym ()) env1 in
+  let comp_tup = compilexpr tup env2 in
+  let check_index_t = type_checking ret_reg IntT in
+  let check_tuple_t = type_checking ret_reg TupleT in 
+  comp_val @ [IMov (loc_val, ret_reg)] @
+  comp_ind @ check_index_t @ [IAdd (ret_reg, Const 2L); IMov (loc_idx, ret_reg)] @ 
+  comp_tup @ check_tuple_t @
+  [
+    ISub (ret_reg, Const 1L);
+    IMov (arg_reg, loc_idx)
+  ]
+  @ check_index arg_reg @
+  [
+    ISar (arg_reg, Const 1L) ; 
+    IMul (arg_reg, Const 8L);     (* Index * 8 *)
+    IAdd (ret_reg, arg_reg);      (* RAX + 8*(i+1) *)
+    IMov (Reg RDX, loc_val);
+    IMov (RegOffset (RAX, 0), Reg RDX);
+    ISub (ret_reg, arg_reg);      (* RAX - 8*(i+1) *)
+    IAdd (ret_reg, Const 1L) ;
+  ]
+
+
 
 (* -----------------------------------
   |                MAIN              |                
@@ -311,6 +345,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | App (fname, args) -> compile_fof_call fname args env compile_expr
   | Tuple exprs -> compile_tuple exprs env compile_expr
   | Get (tup, index) -> compile_get tup index env compile_expr
+  | Set (tup, index, value) -> compile_set tup index value env compile_expr
+  | Length tup -> compile_expr tup env @ type_checking ret_reg TupleT @
+    [ ISub (ret_reg, Const 1L); IMov (ret_reg, RegOffset (RAX, 0))]
   | Void -> []
 
 
@@ -334,7 +371,9 @@ let rec varcount (e:expr): int =
   | App (_, args_ex) -> max_list (List.map varcount args_ex)
   | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
   | Tuple exprs -> max_list (List.map varcount exprs)
-  | Get (tuple, index) -> max (varcount tuple) (varcount index)
+  | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
+  | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
+  | Length tuple -> varcount tuple
   | Void -> 0
 
 (* 

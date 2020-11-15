@@ -1,0 +1,6 @@
+NAME: Nested operation in tuple
+DESCRIPTION: Tuple definition
+SRC:
+(len (tup 1 2 (+ 1 2) 4 5))
+EXPECTED:
+5

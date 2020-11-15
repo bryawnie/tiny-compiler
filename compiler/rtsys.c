@@ -27,7 +27,7 @@ const int ERR_NEG_INDEX = 4;
 const int ERR_INDEX_OVERFLOW = 5;
 
 char * strtuple(int *p){
-  int size = *p;
+  int size = *p >> 1;
   char * strtmp = (char *) malloc(30*sizeof(char));
   char * tupStr = (char *) malloc(30*sizeof(char));
   sprintf(tupStr, "(tup");
@@ -80,10 +80,10 @@ void error(int errCode, val v) {
     fprintf(stderr, "Expected tuple, but got %s\n", strval(v));
     break;
   case ERR_NEG_INDEX:
-    fprintf(stderr, "Unexpected negative index %ld\n", (int_v) v);
+    fprintf(stderr, "Unexpected negative index %s\n", strintval(v-2));
     break;
   case ERR_INDEX_OVERFLOW:
-    fprintf(stderr, "Index out of bounds %ld\n", (int_v) v);
+    fprintf(stderr, "Index out of bounds %s\n", strintval(v-2));
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);

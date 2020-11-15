@@ -73,6 +73,10 @@ let rec parse_expr (sexp : sexp) : expr =
     If (parse_expr c, parse_expr t, parse_expr f)
   | `List [`Atom "get" ; t; i] -> 
     Get (parse_expr t, parse_expr i)
+  | `List [`Atom "set" ; t; i; v] -> 
+    Set (parse_expr t, parse_expr i, parse_expr v)
+  | `List [`Atom "len" ; t] -> 
+    Length (parse_expr t)
   | `List (`Atom "tup"::args) -> 
     Tuple (List.map parse_expr args)
   | `List (`Atom "@sys"::(`Atom fname::args)) -> 

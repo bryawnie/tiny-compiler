@@ -48,6 +48,7 @@ type instruction =
 | IJnz of string      (* Jumps if not zero *)
 | IJz of string       (* Jumps if zero *)
 | IJl  of string      (* Jumps if less than *)
+| IJg of string       (* Jumps if greater than *)
 | IJge of string      (* Jumps if greater or equal than *)
 | IJmp of string      (* Makes a jump *)
 | ICall of string     (* Calls a function *)
@@ -111,6 +112,7 @@ let pp_instr : instruction Fmt.t =
   | IJnz lbl      -> Fmt.pf fmt "  jnz  %a" Fmt.string lbl
   | IJl  lbl      -> Fmt.pf fmt "  jl   %a" Fmt.string lbl
   | IJge lbl      -> Fmt.pf fmt "  jge  %a" Fmt.string lbl
+  | IJg  lbl      -> Fmt.pf fmt "  jg   %a" Fmt.string lbl
   | IJmp lbl      -> Fmt.pf fmt "  jmp  %a" Fmt.string lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | ICqo          -> Fmt.pf fmt "  cqo" 
