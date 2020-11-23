@@ -227,24 +227,38 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
   |              TUPLES              |                
   ------------------------------------*)
 (* Compiles and add an element to tuple *)
-let comp_tuple_elem (index: int) (exp: expr) (env: env) 
-  (compilexpr: expr -> env -> instruction list) : instruction list =
-  let compiled_element = compilexpr exp env in
-  compiled_element @ [IMov (RegOffset (heap_reg, index), ret_reg)]
+let comp_tuple_elem (exp: expr) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list  * env =
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  let compiled_element = compilexpr exp new_env in
+  (compiled_element @ [IMov (loc_arg, ret_reg)], new_env)
 
 (* Compiles and add the elements *)
-let rec comp_tuple_elems (elems: expr list) (env: env) (index: int)
+let rec comp_tuple_elems (elems: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =
   match elems with
   | [] -> []
-  | el::tail -> comp_tuple_elem index el env compilexpr @ comp_tuple_elems tail env (index + 1) compilexpr
+  | el::tail -> 
+    let compiled_elem, new_env = comp_tuple_elem el env compilexpr in 
+    let compiled_src = comp_tuple_elems tail new_env compilexpr in
+    compiled_elem @ compiled_src
+
+let rec assign_tuple_values (index: int) (size: int) (env: env) : instruction list =
+  if index > size then [] else
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  [IMov (arg_reg, loc_arg)  ;
+   IMov (RegOffset (heap_reg, index), arg_reg) ]
+  @ assign_tuple_values (index+1) size new_env
 
 (* Compiles a tuple *)
 let compile_tuple (elems: expr list) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
-  let assign_elements = comp_tuple_elems elems env 1 compilexpr in 
+  let compile_elems = comp_tuple_elems elems env compilexpr in 
   let size = List.length elems in
-  [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ assign_elements @
+  let assign_tuple = assign_tuple_values 1 size env in
+  compile_elems @ 
+  [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ 
+  assign_tuple @
   [
     IMov (ret_reg, Reg heap_reg);     (* Start creating the tuple value itself *)
     IAdd (ret_reg, Const 1L);         (* Tag the tuple *)
@@ -370,7 +384,7 @@ let rec varcount (e:expr): int =
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
   | App (_, args_ex) -> max_list (List.map varcount args_ex)
   | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
-  | Tuple exprs -> max_list (List.map varcount exprs)
+  | Tuple exprs -> max_list (List.map varcount exprs) + List.length exprs
   | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
   | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
   | Length tuple -> varcount tuple
