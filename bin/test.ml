@@ -69,7 +69,7 @@ let parse_tests =
       (parse_expr (sexp_from_string "(= 1 1)"))
       (BinOp (Eq, Num 1L, Num 1L)) ;
     check expr "Same expr"
-      (parse_expr (sexp_from_string "(let (x 5) x)"))
+      (parse_expr (sexp_from_string "(let ((x 5)) x)"))
       (Let ([("x", Num 5L)], Id "x")) ;
     check expr "Same expr"
       (parse_expr (sexp_from_string "(if true 5 6)"))
