@@ -44,33 +44,31 @@ let type_checking (register: arg) (type_expected: dtype): instruction list =
     [ITest (err_reg, Const 6L) ; IJnz  "error_type_handler"]
   | AnyT -> [] 
   
+let rec take (k:int) (l: 'a list) : 'a list =
+  if k > 0 then
+  begin match l with
+  | [] -> []
+  | x :: xs -> x::take (k-1) xs
+  end else []
+
 (* Returns the instruction list to backup the necesary registers before a function call *)
-let rec push_regs (n: int) (regs: arg list): instruction list =
-  if n>0 then
-    begin match regs with
-    | [] -> []
-    | r::tail -> [IPush r] @ push_regs (n-1) tail
-    end
-  else []
+let push_regs (n: int) (regs: arg list): instruction list =
+  List.map (fun r -> IPush r) (take n regs)
+
 
 (* Returns the instruction list to restore the necesary registers after a function call *)
-let rec pop_regs (n: int) (regs: arg list): instruction list =
-  if n>0 then
-    begin match regs with
-    | [] -> []
-    | r::tail -> [IPop r] @ pop_regs (n-1) tail
-    end
-  else []
+let pop_regs (n: int) (regs: arg list): instruction list =
+  List.map (fun r -> IPop r) (take n regs)
 
 (* Prelude of callee to prepare a call *)
 let rec prepare_call ?(types= []) (ins: instruction list list) (regs: arg list) (check: bool) : instruction list list =
   match ins, regs with
   | [], _ -> []
   | ins::tail_args, reg::tail_regs -> 
-    [ins @ (if check then type_checking ret_reg (List.hd types) else []) @ [IMov (reg, ret_reg)] ] 
+    [ins @ (if check && (types !=[]) then type_checking ret_reg (List.hd types) else []) @ [IMov (reg, ret_reg)] ] 
     @ prepare_call tail_args tail_regs check ~types:(if check then (List.tl types) else types)
   | ins::tail_args, [] -> 
-    [ ins @ (if check then type_checking ret_reg (List.hd types) else []) @ [IPush ret_reg]] 
+    [ ins @ (if check && (types !=[]) then type_checking ret_reg (List.hd types) else []) @ [IPush ret_reg]] 
     @ prepare_call tail_args [] check ~types:(if check then (List.tl types) else types)
 
 
@@ -227,24 +225,38 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
   |              TUPLES              |                
   ------------------------------------*)
 (* Compiles and add an element to tuple *)
-let comp_tuple_elem (index: int) (exp: expr) (env: env) 
-  (compilexpr: expr -> env -> instruction list) : instruction list =
-  let compiled_element = compilexpr exp env in
-  compiled_element @ [IMov (RegOffset (heap_reg, index), ret_reg)]
+let comp_tuple_elem (exp: expr) (env: env) 
+  (compilexpr: expr -> env -> instruction list) : instruction list  * env =
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  let compiled_element = compilexpr exp new_env in
+  (compiled_element @ [IMov (loc_arg, ret_reg)], new_env)
 
 (* Compiles and add the elements *)
-let rec comp_tuple_elems (elems: expr list) (env: env) (index: int)
+let rec comp_tuple_elems (elems: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =
   match elems with
   | [] -> []
-  | el::tail -> comp_tuple_elem index el env compilexpr @ comp_tuple_elems tail env (index + 1) compilexpr
+  | el::tail -> 
+    let compiled_elem, new_env = comp_tuple_elem el env compilexpr in 
+    let compiled_src = comp_tuple_elems tail new_env compilexpr in
+    compiled_elem @ compiled_src
+
+let rec assign_tuple_values (index: int) (size: int) (env: env) : instruction list =
+  if index > size then [] else
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  [IMov (arg_reg, loc_arg)  ;
+   IMov (RegOffset (heap_reg, index), arg_reg) ]
+  @ assign_tuple_values (index+1) size new_env
 
 (* Compiles a tuple *)
 let compile_tuple (elems: expr list) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
-  let assign_elements = comp_tuple_elems elems env 1 compilexpr in 
+  let compile_elems = comp_tuple_elems elems env compilexpr in 
   let size = List.length elems in
-  [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ assign_elements @
+  let assign_tuple = assign_tuple_values 1 size env in
+  compile_elems @ 
+  [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ 
+  assign_tuple @
   [
     IMov (ret_reg, Reg heap_reg);     (* Start creating the tuple value itself *)
     IAdd (ret_reg, Const 1L);         (* Tag the tuple *)
@@ -292,6 +304,7 @@ let compile_get (tup: expr) (index: expr) (env: env)
     IMov (ret_reg, RegOffset (RAX, 0))
   ]
 
+(* Compiles set expressions for tuples *)
 let compile_set (tup: expr) (index: expr) (value: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let comp_val = compilexpr value env in
@@ -319,7 +332,22 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
     IAdd (ret_reg, Const 1L) ;
   ]
 
+let compile_let_expr (compilexpr: expr -> env -> instruction list)
+  (env: env) (id: string) (value: expr): instruction list * env =
+  let (new_env, loc)  = extend_env id env in
+  let compiled_val    = compilexpr value env in
+  compiled_val @ [ IMov(loc, ret_reg) ], new_env
 
+
+let rec compile_let_exprs (compilexpr: expr -> env -> instruction list) 
+  (env: env) (pairs: (string*expr) list): instruction list * env =
+  match pairs with
+  | [] -> ([], env)
+  | (id, v)::tail ->
+    let compiled_expr, new_env = compile_let_expr compilexpr env id v in
+    let compiled_tail, final_env = compile_let_exprs compilexpr new_env tail in
+    (compiled_expr @ compiled_tail, final_env)
+  
 
 (* -----------------------------------
   |                MAIN              |                
@@ -332,11 +360,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Bool p  ->  [ IMov (ret_reg, Const (encode_bool p)) ]
   | UnOp (op, e)  -> compile_unop (compile_expr e env) op
   | Id x    ->  [ IMov (ret_reg, let_lookup x env) ]
-  | Let (id,v,b) -> 
-      let (new_env, loc)  = extend_env id env in
-      let compiled_val    = compile_expr v env in
-      let save_val  = [ IMov(loc, ret_reg) ] in
-      compiled_val @ save_val @ (compile_expr b new_env)
+  | Let (vals,b) -> 
+      let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
+      compiled_vals @ (compile_expr b new_env)
   | BinOp (op, l, r) -> compile_binop op l r env compile_expr
   | If (c, t, f) -> (compile_expr c env) 
       @ type_checking ret_reg BoolT 
@@ -351,14 +377,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Void -> []
 
 
-(* The maximum integer in a int list *)
-let rec max_list (l: int list): int =
-  match l with
-  | [] -> 0
-  | h::tail -> max h (max_list tail)
-
-
-(* Counts the max number of vars defined at the same time *)
+(* Counts the max number of expressions mantained in stack at the same time *)
 let rec varcount (e:expr): int =
   match e with
   | Num _ -> 0
@@ -366,11 +385,11 @@ let rec varcount (e:expr): int =
   | Id _ -> 0
   | UnOp (_, sub_ex) -> varcount sub_ex
   | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
-  | Let (_, val_ex, body_ex) -> 1 + max (varcount val_ex) (varcount body_ex)
+  | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
-  | App (_, args_ex) -> max_list (List.map varcount args_ex)
-  | Sys (_, args_ex)-> max_list (List.map varcount args_ex)
-  | Tuple exprs -> max_list (List.map varcount exprs)
+  | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex)
+  | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex)
+  | Tuple exprs -> List.fold_left max 0 (List.map varcount exprs) + List.length exprs
   | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
   | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
   | Length tuple -> varcount tuple
@@ -409,32 +428,25 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
-(* Checks if an element exists in a list *)
-let rec exist elem lst =
-  match lst with
-  | [] -> false
-  | hd::tl -> elem = hd || exist elem tl
 
 (* Finds duplicated in a string list *)
-let rec dupExist lst: 'a =
+let rec dupExist fname lst: 'a =
   match lst with
-  | [] -> ""
-  | hd::tl -> if (exist hd tl) then hd else dupExist tl
+  | [] -> false
+  | hd::tl -> if (List.mem hd tl) then 
+    Fmt.failwith "Duplicate parameter name in function %s: %s" fname hd
+  else dupExist fname tl
 
 (* Compiles definitions for first order functions *)
 let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
   let _, fenv, senv = env in
-  let dup_arg = dupExist params in
-  if dup_arg != "" 
-    then Fmt.failwith "Duplicate parameter name in function %s: %s"
-      fname dup_arg
-  else
-    let lenv = let_env_from_params params empty_env in
-    let stack_offset = Int64.of_int (stack_offset_for_local body) in
-    [IEmpty ; ILabel fname] @ callee_prologue 
-    @ [ISub (Reg RSP, Const stack_offset)]
-    @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
+  let _ = dupExist fname params in
+  let lenv = let_env_from_params params empty_env in
+  let stack_offset = Int64.of_int (stack_offset_for_local body) in
+  [IEmpty ; ILabel fname] @ callee_prologue 
+  @ [ISub (Reg RSP, Const stack_offset)]
+  @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
 (* Compiles a declaration for a function *)
 let compile_declaration (dec: decl) (env: env) 

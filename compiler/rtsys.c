@@ -26,13 +26,21 @@ const int ERR_NOT_TUPLE = 3;
 const int ERR_NEG_INDEX = 4;
 const int ERR_INDEX_OVERFLOW = 5;
 
-char * strtuple(int *p){
+char * strval(val v);
+char * strtuple(val * p);
+char * strintval(val v);
+void error(int errCode, val v);
+val print(val v);
+
+char * strtuple(val *p){
   int size = *p >> 1;
   char * strtmp = (char *) malloc(30*sizeof(char));
   char * tupStr = (char *) malloc(30*sizeof(char));
   sprintf(tupStr, "(tup");
-  for (int i=1; i<=size;i++){
-    sprintf(strtmp, " %ld", (int_v) *(p+2*i) >> 1 );
+  val element;
+  for (int i=1; i<=size; i++) {
+    element = *(p+i);
+    sprintf(strtmp, " %s", strval(element) );
     strcat(tupStr, strtmp);
   }
   free(strtmp);

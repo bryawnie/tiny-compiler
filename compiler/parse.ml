@@ -47,6 +47,19 @@ let notFuns = [
   "true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*";
   "/"; "if"; "let"; "<"; "="; "def"]
 
+let parse_def (parse: sexp -> expr): 'a -> (string * expr)  =
+fun def ->
+  match def with
+  | `List [`Atom id; v] -> (id, parse v)
+  | _ -> Fmt.failwith "Unable to parse defs in Let sentence."
+
+
+let rec parse_defs (parse: sexp -> expr): sexp list -> (string * expr) list =
+  fun defs ->
+    match defs with
+    | [] -> []
+    | def::t -> [(parse_def parse) def] @ (parse_defs parse) t
+
 let rec parse_expr (sexp : sexp) : expr = 
   match sexp with
   | `Atom "true" -> Bool true
@@ -67,8 +80,12 @@ let rec parse_expr (sexp : sexp) : expr =
   | `List [`Atom "/" ; l ; r ] -> BinOp (Div, parse_expr l, parse_expr r)
   | `List [`Atom "<" ; l ; r ] -> BinOp (Less, parse_expr l, parse_expr r)
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse_expr l, parse_expr r)
-  | `List [`Atom "let" ; `List [`Atom id; e]; body] -> 
-    Let (id, parse_expr e, parse_expr body)
+  (* | `List [`Atom "let" ; `List [ `List (`Atom "tup"::args); e]; body] -> 
+    Let (id, parse_expr e, parse_expr body) *)
+  | `List [`Atom "let" ; `List [`Atom id; e]; body] -> (* Simple Let *)
+    Let ([(id, parse_expr e)], parse_expr body)
+  | `List [`Atom "let" ; `List defs; body] -> (* Multiple Let *)
+    Let ((parse_defs parse_expr) defs, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
   | `List [`Atom "get" ; t; i] -> 

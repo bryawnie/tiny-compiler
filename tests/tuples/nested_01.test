@@ -1,0 +1,6 @@
+NAME: Implementing nested tuples
+DESCRIPTION: Nested tuple definition
+SRC:
+(tup 1 2 (tup 1 2) 4 5)
+EXPECTED:
+(tup 1 2 (tup 1 2) 4 5)
