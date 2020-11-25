@@ -1,0 +1,8 @@
+NAME: Pattern Matching Tuples
+DESCRIPTION: Another example
+SRC:
+(let (t (tup 1 2 (tup 4 5)))
+    (let (((tup x y z) t) (b 5))
+        (+ (+ x b) (get z 1))))
+EXPECTED:
+11

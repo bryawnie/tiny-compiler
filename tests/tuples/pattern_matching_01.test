@@ -1,0 +1,6 @@
+NAME: Pattern Matching Tuples
+DESCRIPTION: Pattern Matching Tuples
+SRC:
+(let ((tup a b c) (tup 1 2 3)) (+ a b))
+EXPECTED:
+3

@@ -47,10 +47,26 @@ let notFuns = [
   "true"; "false"; "add1"; "sub1"; "not"; "or"; "and"; "+"; "-"; "*";
   "/"; "if"; "let"; "<"; "="; "def"]
 
-let parse_def (parse: sexp -> expr): 'a -> (string * expr)  =
+
+
+let rec range (init: int) (finish: int) : int list =
+  if init = finish then [] else init::range (init+1) (finish)
+
+let parse_tup_matching  (tup: expr) (ids: t list): (string * expr) list=
+  let strids = List.map 
+  (fun id -> 
+    match id with 
+    |`Atom i -> i
+    |_-> Fmt.failwith "Patter matching failed, not an id to assign") ids in
+  let idsxindex = List.map2 (fun id idx -> (id, idx)) strids (range 0 @@ List.length ids) in
+  List.map (fun (id, idx) -> (id, Get (tup, Num (Int64.of_int idx)))) idsxindex
+
+
+let parse_def (parse: sexp -> expr): 'a -> (string * expr) list  =
 fun def ->
   match def with
-  | `List [`Atom id; v] -> (id, parse v)
+  | `List [`Atom id; v] -> [(id, parse v)]
+  | `List [ `List (`Atom "tup"::args); e] ->  parse_tup_matching (parse e) args
   | _ -> Fmt.failwith "Unable to parse defs in Let sentence."
 
 
@@ -58,7 +74,7 @@ let rec parse_defs (parse: sexp -> expr): sexp list -> (string * expr) list =
   fun defs ->
     match defs with
     | [] -> []
-    | def::t -> [(parse_def parse) def] @ (parse_defs parse) t
+    | def::t -> (parse_def parse) def @ (parse_defs parse) t
 
 let rec parse_expr (sexp : sexp) : expr = 
   match sexp with
@@ -80,8 +96,10 @@ let rec parse_expr (sexp : sexp) : expr =
   | `List [`Atom "/" ; l ; r ] -> BinOp (Div, parse_expr l, parse_expr r)
   | `List [`Atom "<" ; l ; r ] -> BinOp (Less, parse_expr l, parse_expr r)
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse_expr l, parse_expr r)
-  (* | `List [`Atom "let" ; `List [ `List (`Atom "tup"::args); e]; body] -> 
-    Let (id, parse_expr e, parse_expr body) *)
+  | `List [`Atom "let" ; `List [ `List (`Atom "tup"::args); e]; body] -> 
+    let parsed_tuple = parse_expr e in
+    let parsed_defs = parse_tup_matching parsed_tuple args in
+    Let (parsed_defs, parse_expr body) 
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> (* Simple Let *)
     Let ([(id, parse_expr e)], parse_expr body)
   | `List [`Atom "let" ; `List defs; body] -> (* Multiple Let *)
