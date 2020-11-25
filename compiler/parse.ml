@@ -67,8 +67,10 @@ let rec parse_expr (sexp : sexp) : expr =
   | `List [`Atom "/" ; l ; r ] -> BinOp (Div, parse_expr l, parse_expr r)
   | `List [`Atom "<" ; l ; r ] -> BinOp (Less, parse_expr l, parse_expr r)
   | `List [`Atom "=" ; l ; r ] -> BinOp (Eq, parse_expr l, parse_expr r)
+  (* | `List [`Atom "let" ; `List [ `List (`Atom "tup"::args); e]; body] -> 
+    Let (id, parse_expr e, parse_expr body) *)
   | `List [`Atom "let" ; `List [`Atom id; e]; body] -> 
-    Let (id, parse_expr e, parse_expr body)
+    Let ([(id, parse_expr e)], parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
   | `List [`Atom "get" ; t; i] -> 

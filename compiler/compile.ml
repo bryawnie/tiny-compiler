@@ -304,6 +304,7 @@ let compile_get (tup: expr) (index: expr) (env: env)
     IMov (ret_reg, RegOffset (RAX, 0))
   ]
 
+(* Compiles set expressions for tuples *)
 let compile_set (tup: expr) (index: expr) (value: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let comp_val = compilexpr value env in
@@ -331,7 +332,22 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
     IAdd (ret_reg, Const 1L) ;
   ]
 
+let compile_let_expr (compilexpr: expr -> env -> instruction list)
+  (env: env) (id: string) (value: expr): instruction list * env =
+  let (new_env, loc)  = extend_env id env in
+  let compiled_val    = compilexpr value env in
+  compiled_val @ [ IMov(loc, ret_reg) ], new_env
 
+
+let rec compile_let_exprs (compilexpr: expr -> env -> instruction list) 
+  (env: env) (pairs: (string*expr) list): instruction list * env =
+  match pairs with
+  | [] -> ([], env)
+  | (id, v)::tail ->
+    let compiled_expr, new_env = compile_let_expr compilexpr env id v in
+    let compiled_tail, final_env = compile_let_exprs compilexpr new_env tail in
+    (compiled_expr @ compiled_tail, final_env)
+  
 
 (* -----------------------------------
   |                MAIN              |                
@@ -344,11 +360,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Bool p  ->  [ IMov (ret_reg, Const (encode_bool p)) ]
   | UnOp (op, e)  -> compile_unop (compile_expr e env) op
   | Id x    ->  [ IMov (ret_reg, let_lookup x env) ]
-  | Let (id,v,b) -> 
-      let (new_env, loc)  = extend_env id env in
-      let compiled_val    = compile_expr v env in
-      let save_val  = [ IMov(loc, ret_reg) ] in
-      compiled_val @ save_val @ (compile_expr b new_env)
+  | Let (vals,b) -> 
+      let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
+      compiled_vals @ (compile_expr b new_env)
   | BinOp (op, l, r) -> compile_binop op l r env compile_expr
   | If (c, t, f) -> (compile_expr c env) 
       @ type_checking ret_reg BoolT 
@@ -371,7 +385,7 @@ let rec varcount (e:expr): int =
   | Id _ -> 0
   | UnOp (_, sub_ex) -> varcount sub_ex
   | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
-  | Let (_, val_ex, body_ex) -> 1 + max (varcount val_ex) (varcount body_ex)
+  | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
   | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex)
   | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex)
