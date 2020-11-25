@@ -117,6 +117,18 @@ let parse_tests =
         parse_prog (sexp_list_from_string "(def (f) 1)\n(def (g x) (+ x 1))"));
   in
 
+  let test_parse_record () =
+    check decl "Definition"
+      (RecDef ("pancito", ["palta" ; "tomate"]))
+      (parse_decl @@ sexp_from_string "(record pancito palta tomate)") ;
+    check expr "constructor"
+      (App ("pancito", [Bool true ; Bool false]))
+      (parse_expr @@ sexp_from_string "(pancito true false)") ;
+    check expr "getter"
+      (App ("pancito-palta", [Id "x"]))
+      (parse_expr @@ sexp_from_string "(pancito-palta x)") ;
+  in
+
   "parse", [
     test_case "A number" `Quick test_parse_int ;
     test_case "A compound expression" `Quick test_parse_compound ;
@@ -124,6 +136,7 @@ let parse_tests =
     test_case "An invalid s-expression" `Quick test_parse_error ;
     test_case "Declarations" `Quick test_parse_declarations ;
     test_case "Full program with declarations" `Quick test_parse_program ;
+    test_case "Records" `Quick test_parse_record ;
   ]
 
 

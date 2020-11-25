@@ -51,6 +51,7 @@ let rec parse_expr (sexp : sexp) : expr =
   match sexp with
   | `Atom "true" -> Bool true
   | `Atom "false" -> Bool false
+  | `Atom "void" -> Void
   | `Atom s ->
     begin match Int64.of_string_opt s with
       | Some n -> Num n
@@ -101,6 +102,17 @@ let parse_type (sexp : sexp) : dtype =
   | `Atom "bool" -> BoolT
   | `Atom "any" -> AnyT
   | _ -> Fmt.failwith "Not a valid type: %a" CCSexp.pp sexp
+
+let parse_field (sexp: sexp) : string =
+  match sexp with
+  | `Atom id -> id
+  | _ -> Fmt.failwith "Not a valid field name: %a" CCSexp.pp sexp
+
+let rec find_duplicates (l: string list) : string = 
+  match l with 
+    | [] -> ""
+    | head::tail -> if List.mem head tail then head else find_duplicates tail
+
 let parse_decl (sexp : sexp) : decl = 
   match sexp with
   | `List [`Atom "def" ; `List (`Atom name :: params) ; body] ->
@@ -112,6 +124,13 @@ let parse_decl (sexp : sexp) : decl =
         SysFunDef (name, List.map parse_type params, parse_type ret)
       | _ -> Fmt.failwith "Syntax error: %a" CCSexp.pp sexp
     end
+  | `List (`Atom "record"::(`Atom id::fields)) ->
+    let fs = List.map parse_field fields in
+    let dups = find_duplicates fs in
+    if dups != "" then
+      Fmt.failwith "Duplicate field name: %s" dups
+    else
+      RecDef(id, fs)
   | _ -> Fmt.failwith "Not a valid declaration: %a" CCSexp.pp sexp
 
 let parse_prog (sexps : sexp list) : prog = 

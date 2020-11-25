@@ -46,10 +46,17 @@ type expr =
   | If  of expr * expr * expr
   | App of string * expr list (* first order function application *)
   | Sys of string * expr list (* foreign function application *)
-  | Tuple of expr list      (* Components of the tuple *)
-  | Get of expr * expr      (* Tuple, desired index *)
+  | Tuple of expr list        (* Components of the tuple *)
+  | Get of expr * expr        (* Tuple, desired index *)
   | Set of expr * expr * expr
-  | Length of expr          (* Length of a tuple *)
+  | Length of expr            (* Length of a tuple *)
+  (* Record(id, values) - Record constructor *)
+  | Record of string * expr list
+  (* GetField(recordId, fieldId, recordExpr) - Access field *)
+  | GetField of string * string * expr
+  (* IsRec(id, expr) - Determine if record instance is of a cretain type *)
+  | IsRec of string * expr
+  (* No operation *)
   | Void 
 
 (* data type *)
@@ -57,11 +64,13 @@ type dtype =
   | IntT
   | BoolT
   | TupleT
+  | RecordT
   | AnyT
 
 type decl =
   | FunDef of string * string list * expr (* function definition *)
   | SysFunDef of string * dtype list * dtype(* foreign function definition *)
+  | RecDef of string * string list 
 
 type prog =
   | Program of decl list * expr
@@ -110,6 +119,8 @@ let rec pp_expr fmt =
   | Get (t, index)      -> pf fmt "(get %a %a)" pp_expr t pp_expr index
   | Set (t, index, v)   -> pf fmt "(set %a %a %a)" pp_expr t pp_expr index pp_expr v
   | Length t            -> pf fmt "(len %a)" pp_expr t
+  | Record (id, vals)   -> pf fmt "(%s %a)" id (pp_expr_list pp_expr) vals
+  | GetField (rid, fid, e)-> pf fmt "(%s-%s %a)" rid fid pp_expr e
   | Void -> pf fmt "<void>"
 
 
@@ -118,6 +129,7 @@ let pp_dtype fmt =
   | IntT -> pf fmt "int"
   | BoolT -> pf fmt "bool"
   | TupleT -> pf fmt "tuple"
+  | RecordT -> pf fmt "record"
   | AnyT -> pf fmt  "any"
 
 
@@ -127,6 +139,8 @@ let pp_decl fmt =
     pf fmt "(def (%s %s) %a)" name (String.concat " " params) pp_expr body
   | SysFunDef (name, params, ret) ->
     pf fmt "(defsys %s %a -> %a)" name (list ~sep:sp pp_dtype) params pp_dtype ret
+  | RecDef (id, fields) ->
+    pf fmt "(record %s %a)" id (list string) fields
 
 let rec pp_decl_list fmt =
   function

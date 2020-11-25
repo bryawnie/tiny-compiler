@@ -1,0 +1,10 @@
+NAME: homonym fields
+DESCRIPTION: compilation of a record with two fields of the same name should fail
+STATUS: CT error
+SRC:
+(record cosa x y)
+(record coso x x)
+(void)
+
+EXPECTED:
+Duplicate field name in record coso: x

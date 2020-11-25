@@ -13,8 +13,8 @@ open Gensym
 *)
 let ret_reg = Reg RAX
 let arg_reg = Reg R11
-let err_cod_reg = Reg RBX
-let err_reg = Reg RCX
+let err_code_reg = Reg RBX
+let type_tag_reg = Reg RCX
 let heap_reg = R15
 let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
@@ -26,23 +26,32 @@ let not_a_boolean = Const 2L
 let not_a_tuple = Const 3L
 let neg_index = Const 4L
 let index_overflow = Const 5L
+let not_a_record = Const 6L
+let record_type_error = Const 7L
 
+(* TYPE TAGS *)
+let int_tag = Const 0L (* All values ending in 0 are integers *)
+let bool_tag = Const 1L (* 001 - boolean value *)
+let tuple_tag = Const 3L (* 011 - tuple pointer *)
+let record_tag = Const 5L (* 101 - record pointer *)
+
+let tag_bitmask = Const 7L (*111*)
 
 (* This function handles the request for a type checking *)
-let type_checking (register: arg) (type_expected: dtype): instruction list =
-  let prelude (type_error) = [IMov (err_cod_reg, type_error) ; IMov (err_reg, register)] in
-  match type_expected with
-  | IntT -> 
-    prelude (not_a_number)  @ [ITest (err_reg, Const 1L) ; IJnz "error_type_handler"]
-  | BoolT -> 
-    prelude (not_a_boolean) @
-    [IAnd  (err_reg, Const 1L)] @ (* Not Integer *)
-    [ITest (err_reg, Const 7L) ; IJz  "error_type_handler"]
-  | TupleT -> 
-    prelude (not_a_tuple) @
-    [ITest (err_reg, Const 1L) ; IJz  "error_type_handler"] @ (* Not Integer *)
-    [ITest (err_reg, Const 6L) ; IJnz  "error_type_handler"]
-  | AnyT -> [] 
+let type_checking (register: arg) (expected_type: dtype): instruction list =
+  let tag_check error_code type_tag =
+    [IMov (err_code_reg, error_code) ; IMov (type_tag_reg, register) ;
+    IAnd (type_tag_reg, tag_bitmask) ; ICmp (type_tag_reg, type_tag) ;
+    IJnz "error_type_handler"]
+  in
+  match expected_type with
+  | IntT -> [ITest (register, Const 1L) ; 
+    IMov (err_code_reg, not_a_number) ;
+    IJnz "error_type_handler"]
+  | BoolT -> tag_check not_a_boolean bool_tag
+  | TupleT -> tag_check not_a_tuple tuple_tag
+  | RecordT -> tag_check not_a_record record_tag
+  | AnyT -> [] (* AnyT == no typecheck *)
   
 (* Returns the instruction list to backup the necesary registers before a function call *)
 let rec push_regs (n: int) (regs: arg list): instruction list =
@@ -247,7 +256,7 @@ let compile_tuple (elems: expr list) (env: env)
   [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ assign_elements @
   [
     IMov (ret_reg, Reg heap_reg);     (* Start creating the tuple value itself *)
-    IAdd (ret_reg, Const 1L);         (* Tag the tuple *)
+    IAdd (ret_reg, tuple_tag);         (* Tag the tuple *)
     IAdd (Reg heap_reg, Const (Int64.of_int (size*8 + 8 ))) (* Bump the heap pointer *)
   ]
   @ if (size+1) mod 2 = 1 then
@@ -261,12 +270,12 @@ let compile_tuple (elems: expr list) (env: env)
 (* Checks positive index and avoid overflows *)
 let check_index (index: arg) : instruction list =
   [ (* Negative Index Error *)
-    IMov (err_cod_reg, neg_index) ; 
-    IMov (err_reg, index) ;
+    IMov (err_code_reg, neg_index) ; 
+    IMov (type_tag_reg, index) ;
     ICmp (index, Const 0L);     
     IJl  "error_index_handler";
   ] @ [ (* Index out of bounds *)
-    IMov (err_cod_reg, index_overflow) ; 
+    IMov (err_code_reg, index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
     IJg "error_index_handler";
   ]
@@ -348,7 +357,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Set (tup, index, value) -> compile_set tup index value env compile_expr
   | Length tup -> compile_expr tup env @ type_checking ret_reg TupleT @
     [ ISub (ret_reg, Const 1L); IMov (ret_reg, RegOffset (RAX, 0))]
-  | Void -> []
+  | Void -> [INop]
 
 
 (* The maximum integer in a int list *)
@@ -388,13 +397,13 @@ let stack_offset_for_local (exp: expr): int =
 let error_type_handler =
  [ILabel "error_type_handler";
   IMov (Reg RSI, ret_reg);
-  IMov (Reg RDI, err_cod_reg);
+  IMov (Reg RDI, err_code_reg);
   ICall "error"]
 
 let error_index_handler =
   [ILabel "error_index_handler";
-    IMov (Reg RSI, err_reg);
-    IMov (Reg RDI, err_cod_reg);
+    IMov (Reg RSI, type_tag_reg);
+    IMov (Reg RDI, err_code_reg);
     ICall "error"]
 
 (* Callee - Save  @ Init *)
@@ -424,7 +433,7 @@ let rec dupExist lst: 'a =
 (* Compiles definitions for first order functions *)
 let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
-  let _, fenv, senv = env in
+  let _, fenv, senv, renv = env in
   let dup_arg = dupExist params in
   if dup_arg != "" 
     then Fmt.failwith "Duplicate parameter name in function %s: %s"
@@ -434,7 +443,7 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
     let stack_offset = Int64.of_int (stack_offset_for_local body) in
     [IEmpty ; ILabel fname] @ callee_prologue 
     @ [ISub (Reg RSP, Const stack_offset)]
-    @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
+    @ compile_expr body (lenv, fenv, senv, renv) @ callee_epilogue @ [IRet]
 
 (* Compiles a declaration for a function *)
 let compile_declaration (dec: decl) (env: env) 
@@ -459,7 +468,7 @@ let compile_prog : prog Fmt.t =
     match p with Program (decs, exp) ->
       let fenv = fun_env_from_decls decs empty_fun_env in
       let senv = sys_env_from_decls decs empty_sys_env in
-      let env  = empty_env, fenv, senv in
+      let env  = empty_env, fenv, senv, empty_rec_env in
       let functions, externs = compile_declarations decs env in
       let instrs = compile_expr exp env in
       let stack_offset = Int64.of_int (stack_offset_for_local exp) in
