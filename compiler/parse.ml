@@ -108,7 +108,7 @@ let parse_field (sexp: sexp) : string =
   | `Atom id -> id
   | _ -> Fmt.failwith "Not a valid field name: %a" CCSexp.pp sexp
 
-let rec find_duplicates (l: string list) : string = 
+let rec find_duplicates (l: 'a list) : 'a = 
   match l with 
     | [] -> ""
     | head::tail -> if List.mem head tail then head else find_duplicates tail
@@ -116,7 +116,12 @@ let rec find_duplicates (l: string list) : string =
 let parse_decl (sexp : sexp) : decl = 
   match sexp with
   | `List [`Atom "def" ; `List (`Atom name :: params) ; body] ->
-    FunDef (name, List.map parse_param params, parse_expr body)
+    let ps = List.map parse_param params in
+    begin match find_duplicates ps with
+      |"" -> FunDef (name, ps, parse_expr body)
+      | dup ->
+        Fmt.failwith "Duplicate parameter name in function %s: %s" name dup
+    end
   | `List (`Atom "defsys"::(`Atom name::rest)) ->
     begin
       match List.rev rest with
@@ -126,11 +131,11 @@ let parse_decl (sexp : sexp) : decl =
     end
   | `List (`Atom "record"::(`Atom id::fields)) ->
     let fs = List.map parse_field fields in
-    let dups = find_duplicates fs in
-    if dups != "" then
-      Fmt.failwith "Duplicate field name in record %s: %s" id dups
-    else
-      RecDef(id, fs)
+    begin 
+      match find_duplicates fs with
+      | "" -> RecDef(id, fs)
+      | dup -> Fmt.failwith "Duplicate field name in record %s: %s" id dup
+    end
   | _ -> Fmt.failwith "Not a valid declaration: %a" CCSexp.pp sexp
 
 let parse_prog (sexps : sexp list) : prog = 

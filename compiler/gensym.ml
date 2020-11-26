@@ -18,7 +18,13 @@ let equal_gensym = create_gensym "equal"
 let tmp_gensym = create_gensym "tmp"
 let and_gensym = create_gensym "and"
 let or_gensym = create_gensym "or"
+let fun_gensym = create_gensym "fun"
 
+(* returns a label that can be used in assembly *)
+let get_fun_label fun_name =
+  let clean_name = String.split_on_char '-' fun_name in
+  String.concat "_" @@ fun_gensym()::clean_name
+ 
 (* create a simple counter *)
 let create_counter () =
   let r = ref 0 in (fun () -> incr r; !r)

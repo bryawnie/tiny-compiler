@@ -27,8 +27,9 @@ let pp_memloc fmt loc =
   Second field -> Memory location
 *)
 type let_env = (string * memloc) list
-(* An "fenv" contains function definitions *)
-type fun_env = (string * int) list
+(* An "fenv" contains function definitions.
+                env_name * (label * arity) *)
+type fun_env = (string * (string  * int)) list
 (* sys_env contains foreign function definitions *)
 type sys_env = (string * (dtype list * dtype)) list
 (* rec_env contains record definition data *)
@@ -45,7 +46,6 @@ type env = let_env * fun_env * sys_env (* * rec_env *)
 let empty_env : let_env = []
 let empty_fun_env : fun_env = []
 let empty_sys_env : sys_env = []
-(* let empty_rec_env : rec_env = [] *)
 
 (* pretty printers *)
 let pp_fun_env fmt lenv =
@@ -72,7 +72,7 @@ let let_lookup (name: string) (env: env) : arg =
 
 (* looks up a function definition in an environment. Returns its arity
 if present; fails with an "Undefined function" error if not. *)
-let fun_lookup (name: string) (env: env) : int =
+let fun_lookup (name: string) (env: env) : string * int =
   match env with _, fenv, _ -> 
     if List.mem_assoc name fenv then List.assoc name fenv
     else Fmt.failwith "Undefined function: %s" name
@@ -162,10 +162,10 @@ let extend_arg_env (name: string) (env: let_env) : (let_env * arg) =
   ((name, loc)::env, memloc_to_arg loc)
 
 (* Extends a fun_env with a new function *)
-let extend_fun_env (fname: string) (arity: int) (fenv: fun_env) : fun_env =
+let extend_fun_env (fname: string) (flabel: string) (arity: int) (fenv: fun_env) : fun_env =
   if List.mem_assoc fname fenv then
     Fmt.failwith "Duplicate function name: %s" fname
-  else (fname, arity)::fenv
+  else (fname, (flabel, arity))::fenv
 
 (* Extends a sys_env with a new function *)
 let extend_sys_env (fname: string) (params: dtype list) (return_type: dtype)
@@ -181,11 +181,11 @@ let extend_rec_env (id: string) (fields: string list) (renv: rec_env) :
     Fmt.failwith "Duplicate record definition: %s" id
   else (id, (List.length renv, fields))::renv *)
 
-let rec multi_extend_fun_env (defs: (string * int) list) (fenv: fun_env) : fun_env =
+let rec multi_extend_fun_env (defs: (string * string * int) list) (fenv: fun_env) : fun_env =
   match defs with
   | [] -> fenv
-  | (name, arity)::tail -> 
-    multi_extend_fun_env tail (extend_fun_env name arity fenv)
+  | (name, label, arity)::tail -> 
+    multi_extend_fun_env tail (extend_fun_env name label arity fenv)
 
 
 (*--------------------------
@@ -208,11 +208,17 @@ let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
   | d::tail -> 
     match d with 
     | FunDef (fname, params, _) -> fun_env_from_decls tail 
-      (extend_fun_env fname (List.length params) fenv)
+      (extend_fun_env fname (Gensym.get_fun_label fname) (List.length params) fenv)
     | RecDef (id, fields) -> 
-      let cons = id, List.length fields in
-      let get = List.map (fun fld -> String.concat "-" [id;fld], 1) fields in
-      let type_checker = String.concat "" [id; "?"], 1 in
+      let cons = id, Gensym.get_fun_label id, List.length fields in
+      let get =
+         List.map (fun fld -> let fname = String.concat "-" [id;fld] in
+          fname, Gensym.get_fun_label fname, 1) fields 
+        in
+      let type_checker = 
+        let fname = String.concat "" [id; "?"] in 
+        fname, Gensym.get_fun_label fname, 1 
+      in
       fun_env_from_decls tail (
         multi_extend_fun_env ([cons;type_checker]@get) fenv) 
     | _-> fun_env_from_decls tail fenv
@@ -226,12 +232,3 @@ let rec sys_env_from_decls (ds: decl list) (senv: sys_env) : sys_env =
     | SysFunDef (fname, params, return) -> sys_env_from_decls tail 
       (extend_sys_env fname params return senv)
     | _ -> sys_env_from_decls tail senv
-
-(* let rec rec_env_from_decls (ds:decl list) (renv: rec_env) : rec_env =
-  match ds with
-  | [] -> renv
-  | d::tail ->
-    match d with
-    | RecDef (id, fields) -> 
-      rec_env_from_decls tail (extend_rec_env id fields renv)
-    | _ -> rec_env_from_decls tail renv *)

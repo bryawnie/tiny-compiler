@@ -15,11 +15,6 @@ type reg =
 | R10   (*                |   R *)
 | R11   (* Temp Register  |   R *)
 | R15   (* HEAP Register  |   E *)
-(* 
-| R12
-| R13
-| R14
-| R15 *)
 (* R = caller-save ; E = callee-save *)
 
 

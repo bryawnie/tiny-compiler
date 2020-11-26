@@ -30,12 +30,13 @@ const val VAL_FALSE = TAG_BOOL;
 /* MACROS */
 #define VAL_TO_PTR(v) ((val*) (v & ~TAG_BITMASK))
 #define GET_TUPLE_SIZE(v) (*VAL_TO_PTR(v))
+#define TUPLE_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
 /* the first element of a record contains two numbers: the 32 least
   significant bits represent its size, and the most significant 32 bits
   are a type tag to differentiate amongst different records. */
 #define GET_RECORD_SIZE(v) (*VAL_TO_PTR(v) & RECORD_SIZE_BITMASK)
-#define GET_RECORD_TYPE(V) (*VAL_TO_PTR(V) & ~RECORD_SIZE_BITMASK) >> 32
-#define TUPLE_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
+#define GET_RECORD_TYPE(v) (*VAL_TO_PTR(v) & ~RECORD_SIZE_BITMASK) >> 32
+#define RECORD_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
 
 /* Format strings */
 const char *STR_TRUE = "true";
@@ -63,7 +64,7 @@ typedef enum data_type dtype;
 
 dtype typeofval(val v) {
   
-  // fprintf(stderr, "typeofval: v=%ld\n", v);
+  // fprintf(stderr, "typeofval(defsys raw_print any -> any): v=%ld\n", v);
    
   if (!(v & 1)) {
     // integer values are always even (last bit is 0)
@@ -161,7 +162,7 @@ int sprintval(char *str, val v) {
       return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(", ")");
 
     case TYPE_RECORD:
-      return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
+      return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
 
     default:
       return sprintf(str, "Unknown value: %#018lx", v);
@@ -178,6 +179,8 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
   s = s + sprintf(s, "%s", pre);
   for (int i = 0; i < size; i++) {
     s = s + sprintval(s, a[i]);
+    if (i + 1 < size)
+      *s++ = ' ';
   }
   s = s + sprintf(s, "%s", post);
   return s - str;
@@ -241,15 +244,19 @@ val print(val v) {
     break;
 
     case TYPE_TUPLE:
-    str = val_to_str(v);
+    /* str = val_to_str(v);
     printf("> %s\n", str);
-    free(str);
+    free(str); */
+    printf("> (tuple)\n");
     break;
 
     case TYPE_RECORD:
+    /*
     str = val_to_str(v);
     printf("> %s\n", str);
     free(str);
+    */
+    printf("> {record}\n");
     break;
 
     default:
@@ -257,6 +264,11 @@ val print(val v) {
     break;
   }
   // free(str);
+  return v;
+}
+
+val raw_print(val v){
+  printf("> (raw) 0x%016lx\n", v);
   return v;
 }
 

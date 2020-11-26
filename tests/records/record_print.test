@@ -1,0 +1,8 @@
+NAME: record printing
+SRC:
+(record point3d x y z)
+(@sys print (point3d 6 6 6))
+
+EXPECTED: 
+> {record}
+{6 6 6}
