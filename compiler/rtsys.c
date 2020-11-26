@@ -30,8 +30,11 @@ const val VAL_FALSE = TAG_BOOL;
 /* MACROS */
 #define VAL_TO_PTR(v) ((val*) (v & ~TAG_BITMASK))
 #define GET_TUPLE_SIZE(v) (*VAL_TO_PTR(v))
+/* the first element of a record contains two numbers: the 32 least
+  significant bits represent its size, and the most significant 32 bits
+  are a type tag to differentiate amongst different records. */
 #define GET_RECORD_SIZE(v) (*VAL_TO_PTR(v) & RECORD_SIZE_BITMASK)
-#define GET_RECORD_TYPE(V) (*VAL_TO_PTR(V) & ~RECORD_SIZE_BITMASK)
+#define GET_RECORD_TYPE(V) (*VAL_TO_PTR(V) & ~RECORD_SIZE_BITMASK) >> 32
 #define TUPLE_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
 
 /* Format strings */
@@ -194,7 +197,6 @@ char *val_to_str(val v) {
 void error(int errCode, val v) {
   
   //fprintf(stderr, "error: %ld\n", v);
-  
 
   switch (errCode){
   case ERR_NOT_NUMBER:

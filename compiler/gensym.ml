@@ -18,3 +18,9 @@ let equal_gensym = create_gensym "equal"
 let tmp_gensym = create_gensym "tmp"
 let and_gensym = create_gensym "and"
 let or_gensym = create_gensym "or"
+
+(* create a simple counter *)
+let create_counter () =
+  let r = ref 0 in (fun () -> incr r; !r)
+
+let record_counter = create_counter ()

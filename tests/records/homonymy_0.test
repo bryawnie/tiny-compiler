@@ -6,4 +6,4 @@ SRC:
 (record pancito mantequilla)
 (void)
 EXPECTED:
-Duplicate record name: pancito
+Duplicate function name: pancito

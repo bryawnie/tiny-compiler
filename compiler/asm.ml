@@ -41,7 +41,9 @@ type instruction =
 | IMul of arg * arg   (* Arithmetic Product*)
 | IDiv of arg         (* Divides RDX RAX / arg *)
 | ISar of arg * arg   (* Arithmetic Right Shift *)
+| IShr of arg * arg   (* Logical right shift (doesn't preserve sign)*)
 | ISal of arg * arg   (* Arithmetic Left Shift *)
+| IShl of arg * arg   (* Logical left shift *)
 | ICmp of arg * arg   (* Comparer (-) *)
 | ITest of arg * arg  (* Comparer (&) *)
 | IJe  of string      (* Jumps if equal *)
@@ -106,7 +108,9 @@ let pp_instr : instruction Fmt.t =
   | IMul (a1, a2) -> Fmt.pf fmt "  imul %a, %a" pp_arg a1 pp_arg a2
   | IDiv a        -> Fmt.pf fmt "  idiv %a" pp_arg a
   | ISar (a1, a2) -> Fmt.pf fmt "  sar  %a, %a" pp_arg a1 pp_arg a2
+  | IShr (a1, a2) -> Fmt.pf fmt "  shr  %a, %a" pp_arg a1 pp_arg a2
   | ISal (a1, a2) -> Fmt.pf fmt "  sal  %a, %a" pp_arg a1 pp_arg a2
+  | IShl (a1, a2) -> Fmt.pf fmt "  shl  %a, %a" pp_arg a1 pp_arg a2
   | ICmp (a1, a2) -> Fmt.pf fmt "  cmp  %a, %a" pp_arg a1 pp_arg a2
   | ITest (a1, a2)-> Fmt.pf fmt "  test %a, %a" pp_arg a1 pp_arg a2
   | IJe  lbl      -> Fmt.pf fmt "  je   %a" Fmt.string lbl

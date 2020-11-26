@@ -32,20 +32,20 @@ type fun_env = (string * int) list
 (* sys_env contains foreign function definitions *)
 type sys_env = (string * (dtype list * dtype)) list
 (* rec_env contains record definition data *)
-type rec_env = ((*id*)string * ((*tag*)int * (*fields*)string list)) list
+(* type rec_env = ((*id*)string * ((*tag*)int * (*fields*)string list)) list *)
 (* 
 An environment is composed of three separate namespaces:
   > let-bound variables
   > functions
   > foreign functions
 *)
-type env = let_env * fun_env * sys_env * rec_env
+type env = let_env * fun_env * sys_env (* * rec_env *)
 
 (* Alias for empty environment *)
 let empty_env : let_env = []
 let empty_fun_env : fun_env = []
 let empty_sys_env : sys_env = []
-let empty_rec_env : rec_env = []
+(* let empty_rec_env : rec_env = [] *)
 
 (* pretty printers *)
 let pp_fun_env fmt lenv =
@@ -66,21 +66,21 @@ let pp_env fmt env =
 (* looks up a let-bound variable in an environment. Returns its memory
 location if present, fails with an "Unbound identifier" error if not.*)
 let let_lookup (name: string) (env: env) : arg =
-  match env with lenv, _ , _, _->
+  match env with lenv, _ , _->
     if List.mem_assoc name lenv then memloc_to_arg @@ List.assoc name lenv
     else Fmt.failwith "Unbound identifier: %s" name
 
 (* looks up a function definition in an environment. Returns its arity
 if present; fails with an "Undefined function" error if not. *)
 let fun_lookup (name: string) (env: env) : int =
-  match env with _, fenv, _, _ -> 
+  match env with _, fenv, _ -> 
     if List.mem_assoc name fenv then List.assoc name fenv
     else Fmt.failwith "Undefined function: %s" name
 
 (* looks up a system (foreign) function in an env. Returns its parameter
 and return types; fails with and "Undefined system function" error if not.*)
 let sys_lookup (name: string) (env: env) : (dtype list * dtype) =
-  match env with _ , _, senv, _ ->
+  match env with _ , _, senv ->
     if List.mem_assoc name senv then List.assoc name senv 
     else Fmt.failwith "Undefined system function: %s" name
 
@@ -89,11 +89,12 @@ the identifier of a record type with an integer tag and a field name list.
 
 If the identifier is not found, the tag -1 and and empty list is returned,
 rather than raise an exception. *)
+(*
 let rec_lookup (id: string) (env: env) : (int * string list) =
   match env with _, _, _, renv -> 
     if List.mem_assoc id renv then List.assoc id renv
     else Fmt.failwith "Undefined record type: %s" id
-
+*)
 
 (*--------------
 | Slot getters |
@@ -128,12 +129,15 @@ let get_let_slot (env: let_env) : memloc =
   
   Unlike stack offsets for let-bound identifiers, stack offsets for arguments
   are "below" RBP, since this is how a function accesses the arguments it
-  received from the caller. *)
+  received from the caller. 
+  
+  Arguments ALWAYS precede let-bound values in the environment.
+  *)
   let get_arg_slot (env: let_env) : memloc =
     let arg_regs = [MReg RSI; MReg RDI; MReg RDX; MReg RCX; MReg R8; MReg R9] in
     let n = List.length env in
     if n < 6 
-      then List.nth arg_regs (n + 1) 
+      then List.nth arg_regs (n+1)
       else StackOffset (4 - n) (*  arg_n = RBP + 8 * ((n - 6) + 2)  *)
 
 
@@ -148,9 +152,9 @@ let extend_let_env (name: string) (env: let_env) : (let_env * arg) =
 
 (* Extends an environment with a new let-bound variable *)
 let extend_env (name: string) (env: env) : (env * arg) =
-  match env with lenv, fenv, senv, renv ->
+  match env with lenv, fenv, senv ->
   let new_lenv, arg = extend_let_env name lenv in
-  ((new_lenv, fenv, senv, renv), arg)
+  ((new_lenv, fenv, senv), arg)
 
 (* Extends a let_env with function parameters *)
 let extend_arg_env (name: string) (env: let_env) : (let_env * arg) =
@@ -170,12 +174,19 @@ let extend_sys_env (fname: string) (params: dtype list) (return_type: dtype)
     Fmt.failwith "Duplicate system function name: %s" fname
   else (fname, (params, return_type))::senv
 
-(* Extends a rec_env with a new record type *)
+(* Extends a rec_env with a new record type *)(* 
 let extend_rec_env (id: string) (fields: string list) (renv: rec_env) :
   rec_env =
   if List.mem_assoc id renv then
     Fmt.failwith "Duplicate record definition: %s" id
-  else (id, (List.length renv, fields))::renv
+  else (id, (List.length renv, fields))::renv *)
+
+let rec multi_extend_fun_env (defs: (string * int) list) (fenv: fun_env) : fun_env =
+  match defs with
+  | [] -> fenv
+  | (name, arity)::tail -> 
+    multi_extend_fun_env tail (extend_fun_env name arity fenv)
+
 
 (*--------------------------
 | Environment constructors |
@@ -198,6 +209,12 @@ let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
     match d with 
     | FunDef (fname, params, _) -> fun_env_from_decls tail 
       (extend_fun_env fname (List.length params) fenv)
+    | RecDef (id, fields) -> 
+      let cons = id, List.length fields in
+      let get = List.map (fun fld -> String.concat "-" [id;fld], 1) fields in
+      let type_checker = String.concat "" [id; "?"], 1 in
+      fun_env_from_decls tail (
+        multi_extend_fun_env ([cons;type_checker]@get) fenv) 
     | _-> fun_env_from_decls tail fenv
 
 (* construct a sys_env from function declarations *)
@@ -210,11 +227,11 @@ let rec sys_env_from_decls (ds: decl list) (senv: sys_env) : sys_env =
       (extend_sys_env fname params return senv)
     | _ -> sys_env_from_decls tail senv
 
-let rec rec_env_from_decls (ds:decl list) (renv: rec_env) : rec_env =
+(* let rec rec_env_from_decls (ds:decl list) (renv: rec_env) : rec_env =
   match ds with
   | [] -> renv
   | d::tail ->
     match d with
     | RecDef (id, fields) -> 
       rec_env_from_decls tail (extend_rec_env id fields renv)
-    | _ -> rec_env_from_decls tail renv
+    | _ -> rec_env_from_decls tail renv *)

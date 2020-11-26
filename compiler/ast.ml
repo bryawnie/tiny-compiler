@@ -51,11 +51,11 @@ type expr =
   | Set of expr * expr * expr
   | Length of expr            (* Length of a tuple *)
   (* Record(id, values) - Record constructor *)
-  | Record of string * expr list
+  (* | Record of string * expr list *)
   (* GetField(recordId, fieldId, recordExpr) - Access field *)
-  | GetField of string * string * expr
+  (* | GetField of string * string * expr *)
   (* IsRec(id, expr) - Determine if record instance is of a cretain type *)
-  | IsRec of string * expr
+  (* | IsRec of string * expr *)
   (* No operation *)
   | Void 
 
@@ -119,8 +119,8 @@ let rec pp_expr fmt =
   | Get (t, index)      -> pf fmt "(get %a %a)" pp_expr t pp_expr index
   | Set (t, index, v)   -> pf fmt "(set %a %a %a)" pp_expr t pp_expr index pp_expr v
   | Length t            -> pf fmt "(len %a)" pp_expr t
-  | Record (id, vals)   -> pf fmt "(%s %a)" id (pp_expr_list pp_expr) vals
-  | GetField (rid, fid, e)-> pf fmt "(%s-%s %a)" rid fid pp_expr e
+  (* | Record (id, vals)   -> pf fmt "(%s %a)" id (pp_expr_list pp_expr) vals *)
+  (* | GetField (rid, fid, e)-> pf fmt "(%s-%s %a)" rid fid pp_expr e *)
   | Void -> pf fmt "<void>"
 
 

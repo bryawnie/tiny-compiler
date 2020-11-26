@@ -33,9 +33,13 @@ let record_type_error = Const 7L
 let int_tag = Const 0L (* All values ending in 0 are integers *)
 let bool_tag = Const 1L (* 001 - boolean value *)
 let tuple_tag = Const 3L (* 011 - tuple pointer *)
-let record_tag = Const 5L (* 101 - record pointer *)
-
+let record_tag = Const 5L (* 101 - record pointer *) 
 let tag_bitmask = Const 7L (*111*)
+
+(* other constants *)
+let rax_error_handler = "error_type_handler"
+let rcx_error_handler = "error_index_handler"
+
 
 (* This function handles the request for a type checking *)
 let type_checking (register: arg) (expected_type: dtype): instruction list =
@@ -431,9 +435,9 @@ let rec dupExist lst: 'a =
   | hd::tl -> if (exist hd tl) then hd else dupExist tl
 
 (* Compiles definitions for first order functions *)
-let compile_def (fname: string) (params: string list) (body: expr) (env: env): 
+let compile_fundef (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
-  let _, fenv, senv, renv = env in
+  let _, fenv, senv = env in
   let dup_arg = dupExist params in
   if dup_arg != "" 
     then Fmt.failwith "Duplicate parameter name in function %s: %s"
@@ -443,15 +447,87 @@ let compile_def (fname: string) (params: string list) (body: expr) (env: env):
     let stack_offset = Int64.of_int (stack_offset_for_local body) in
     [IEmpty ; ILabel fname] @ callee_prologue 
     @ [ISub (Reg RSP, Const stack_offset)]
-    @ compile_expr body (lenv, fenv, senv, renv) @ callee_epilogue @ [IRet]
+    @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
 
-(* Compiles a declaration for a function *)
+(* compiles the constructor function for a record *)
+let compile_rec_constructor (id: string) (id_code: int64) (arity: int) : instruction list =
+  let heap_size = Const (Int64.of_int (8 + arity * 8)) in
+  let rec move_args n =
+    if n <= 0 then []
+    else if n > 6 then 
+      IMov(RegOffset(heap_reg, n), RegOffset(RBP, -2 -(n-6)))::(move_args @@ n-1)
+    else [IMov(RegOffset(heap_reg, n), List.nth arg_regs (n-1))]
+  in
+  [IEmpty; ILabel id ;(* constructor name *)
+  (* rsp does not move because this function does not use the stack.
+  rbp is not backed up because it is not modified. *)
+  IMov (ret_reg, Const id_code); (* rax <- id_code *)
+  IMov (RegOffset(heap_reg, 0), ret_reg)] (* write id_code to heap *) 
+  @ move_args arity               (* write values to heap *)
+  @ [IMov (ret_reg, Reg heap_reg) ; (* get pointer value *)
+  IAnd (ret_reg, record_tag) ;    (* tag value *)
+  IAdd (Reg heap_reg, heap_size) ;(* bump heap *)
+  IRet]                           (* return *)
+
+(* compiles the get function for a record field *)
+let compile_rec_get (rec_id: string) (id_code: int64) 
+  (field_id: string) (field_pos: int) =
+  let fun_name = String.concat "-" [rec_id ; field_id] in
+  [ILabel fun_name ;                  (* function name *)
+  IMov (ret_reg, Reg RDI) ;           (* rax <- val *)
+  IMov (arg_reg, Const id_code) ;     (* r11 <- id_code *)
+  IMov (err_code_reg, record_type_error) ; (* r <- error_code *)
+  ICmp (RegOffset(RAX, 0), arg_reg) ; (* TYPE CHECK! *)
+  IJne rax_error_handler;             (* if != then error_handler *)
+  IMov (Reg RAX, RegOffset(RAX, field_pos)) ; (* rax <- [rax + 8 * i]*)
+  IRet] (* return *)
+
+let rec compile_getters (rec_id: string) (rec_code: int64) 
+  (fields: string list) (pos: int) =
+  match fields with
+  | [] -> []
+  | field_id::tail ->
+    (compile_rec_get rec_id rec_code field_id pos)
+    @ (compile_getters rec_id rec_code tail (pos+1))
+
+(* Compiles a record type checker. Type checkers have the name of the form
+"[record_id]?" and return true if the passed argument is of type record_id *)
+let compile_rec_typechecker (rec_id: string) (id_code: int64) : instruction list =
+  let label = String.concat "" [rec_id ; "?"] in
+  let return_label = String.concat "_" [label ; "return"] in
+  [ILabel label ;
+  IMov (ret_reg, Const false_encoding) ;  (* rax <- false *)
+  IMov (arg_reg, Const id_code) ;         (* r11 <- id_code *)
+  ICmp (RegOffset(RDI, 0), arg_reg) ;
+  IJne return_label ;
+  IMov (ret_reg, Const true_encoding) ;
+  ILabel return_label ;
+  IRet]                                   (* return *val == id_code *)
+
+(* Compiles constructors and getters for a record type *)
+let compile_recdef (id: string) (fields: string list) : instruction list =
+  (* This tag allows for record type checking at runtime.
+    tag = (record_counter() << 32) | length(fields) *)
+  let rec_id_code = Int64.add
+    (Int64.shift_left (Int64.of_int @@ record_counter ()) 32)
+    (Int64.of_int @@ List.length fields)
+  in 
+  let constructor = 
+    compile_rec_constructor id rec_id_code (List.length fields) 
+  in
+  let getters = compile_getters id rec_id_code fields 1 in
+  let type_checker = compile_rec_typechecker id rec_id_code in
+  constructor @ getters @ type_checker
+
+(* Compiles a declaration for a function. Returns a instr list for compiled
+functions and another for foreign function "extern"s *)
 let compile_declaration (dec: decl) (env: env) 
 (funs: instruction list) (exts: instruction list): instruction list * instruction list =
   match dec with 
   | FunDef (fname, params, body) -> 
-    compile_def fname params body env @ funs , exts
+    compile_fundef fname params body env @ funs , exts
   | SysFunDef (fname, _, _) -> funs, [IExtern fname] @ exts
+  | RecDef (id, fields) -> compile_recdef id fields, exts
 
 (* Compiles declarations for functions *)  
 let rec compile_declarations (decls: decl list) (env: env) :
@@ -468,7 +544,7 @@ let compile_prog : prog Fmt.t =
     match p with Program (decs, exp) ->
       let fenv = fun_env_from_decls decs empty_fun_env in
       let senv = sys_env_from_decls decs empty_sys_env in
-      let env  = empty_env, fenv, senv, empty_rec_env in
+      let env  = empty_env, fenv, senv in
       let functions, externs = compile_declarations decs env in
       let instrs = compile_expr exp env in
       let stack_offset = Int64.of_int (stack_offset_for_local exp) in

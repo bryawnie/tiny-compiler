@@ -128,7 +128,7 @@ let parse_decl (sexp : sexp) : decl =
     let fs = List.map parse_field fields in
     let dups = find_duplicates fs in
     if dups != "" then
-      Fmt.failwith "Duplicate field name: %s" dups
+      Fmt.failwith "Duplicate field name in record %s: %s" id dups
     else
       RecDef(id, fs)
   | _ -> Fmt.failwith "Not a valid declaration: %a" CCSexp.pp sexp

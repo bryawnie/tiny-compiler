@@ -1,6 +1,7 @@
 NAME: constructor conflicts
 DESCRIPTION: constructors and field-getters are functions. Compilation of
 a function with the same name as a record should fail.
+STATUS: CT error
 SRC:
 (record rec x y z)
 (def (rec x) x)
