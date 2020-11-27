@@ -29,7 +29,7 @@ const val VAL_FALSE = TAG_BOOL;
 
 /* MACROS */
 #define VAL_TO_PTR(v) ((val*) (v & ~TAG_BITMASK))
-#define GET_TUPLE_SIZE(v) (*VAL_TO_PTR(v))
+#define GET_TUPLE_SIZE(v) (*VAL_TO_PTR(v)/2)
 #define TUPLE_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
 /* the first element of a record contains two numbers: the 32 least
   significant bits represent its size, and the most significant 32 bits
@@ -133,7 +133,7 @@ int sprintval(char *str, val v) {
       return sprintf(str, "%s", aux);
 
     case TYPE_TUPLE:
-      return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(", ")");
+      return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup", ")");
 
     case TYPE_RECORD:
       return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
@@ -152,9 +152,10 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
   char *s = str;
   s = s + sprintf(s, "%s", pre);
   for (int i = 0; i < size; i++) {
+    *s++ = ' ';
     s = s + sprintval(s, a[i]);
-    if (i + 1 < size)
-      *s++ = ' ';
+    // if (i + 1 < size)
+      
   }
   s = s + sprintf(s, "%s", post);
   return s - str;
@@ -174,6 +175,7 @@ char *val_to_str(val v) {
 void error(int errCode, val v) {
   
   char *str = val_to_str(v);
+  int_v int_value = (int_v) v;
 
   switch (errCode){
   case ERR_NOT_NUMBER:
@@ -186,10 +188,10 @@ void error(int errCode, val v) {
     fprintf(stderr, "Expected tuple, but got %s\n", str);
     break;
   case ERR_NEG_INDEX:
-    fprintf(stderr, "Unexpected negative index %s\n", str);
+    fprintf(stderr, "Unexpected negative index %ld\n", (int_value - 2) >> 1);
     break;
   case ERR_INDEX_OVERFLOW:
-    fprintf(stderr, "Index out of bounds %s\n", str);
+    fprintf(stderr, "Index out of bounds %ld\n", (int_value - 2) >> 1);
     break;
   case ERR_NOT_RECORD:
     fprintf(stderr, "Expected record, but got %s\n", str);

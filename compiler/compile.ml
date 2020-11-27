@@ -40,6 +40,13 @@ let tag_bitmask = Const 7L (*111*)
 let rax_error_handler = "error_type_handler"
 let rcx_error_handler = "error_index_handler"
 
+let str_type (t: dtype): string =
+  match t with
+  | IntT    -> "Integer"
+  | BoolT   -> "Boolean"
+  | TupleT  -> "Tuple"
+  | RecordT -> "Record"
+  | AnyT    -> "Any"
 
 (* This function handles the request for a type checking *)
 let type_checking (register: arg) (expected_type: dtype): instruction list =
@@ -48,14 +55,21 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
     IAnd ((Reg type_code_reg), tag_bitmask) ; ICmp ((Reg type_code_reg), type_tag) ;
     IJnz "error_type_handler"]
   in
-  match expected_type with
-  | IntT -> [ITest (register, Const 1L) ; 
+  let beg_comm = [IComment (Fmt.str "Begin Type Checking %s" @@ str_type expected_type)] in
+  let end_comm = [IComment (Fmt.str "End Type Checking %s" @@ str_type expected_type) ] in
+  beg_comm @
+  begin match expected_type with
+  | IntT -> [
+    ITest (register, Const 1L) ; 
     IMov ((Reg err_code_reg), not_a_number) ;
-    IJnz "error_type_handler"]
+    IJnz "error_type_handler";
+  ]
   | BoolT -> tag_check not_a_boolean bool_tag
   | TupleT -> tag_check not_a_tuple tuple_tag
   | RecordT -> tag_check not_a_record record_tag
   | AnyT -> [] (* AnyT == no typecheck *)
+  end
+  @ end_comm
   
 let rec take (k:int) (l: 'a list) : 'a list =
   if k > 0 then
@@ -286,14 +300,18 @@ let compile_tuple (elems: expr list) (env: env)
 (* Checks positive index and avoid overflows *)
 let check_index (index: arg) : instruction list =
   [ (* Negative Index Error *)
+    IComment "Begin Check: Positive Index for Tuples";
     IMov ((Reg err_code_reg), neg_index) ; 
     IMov ((Reg type_code_reg), index) ;
     ICmp (index, Const 0L);     
     IJl  "error_index_handler";
+    IComment "End Check: Positive Index for Tuples";
   ] @ [ (* Index out of bounds *)
+    IComment "Begin Check: Index out of Bounds";
     IMov ((Reg err_code_reg), index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
     IJg "error_index_handler";
+    IComment "End Check: Index out of Bounds";
   ]
 
 (* Compiles get expressions *)
@@ -307,7 +325,7 @@ let compile_get (tup: expr) (index: expr) (env: env)
   comp_ind @ check_index_t @ [IAdd ((Reg ret_reg), Const 2L); IMov (loc_idx, (Reg ret_reg))] @ 
   comp_tup @ check_tuple_t @
   [ 
-    ISub ((Reg ret_reg), Const 1L) ; 
+    ISub ((Reg ret_reg), tuple_tag) ; 
     IMov ((Reg aux_reg), loc_idx) 
   ] @ check_index (Reg aux_reg) @
   [ 
@@ -331,7 +349,7 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
   comp_ind @ check_index_t @ [IAdd ((Reg ret_reg), Const 2L); IMov (loc_idx, (Reg ret_reg))] @ 
   comp_tup @ check_tuple_t @
   [
-    ISub ((Reg ret_reg), Const 1L);
+    ISub ((Reg ret_reg), tuple_tag);
     IMov ((Reg aux_reg), loc_idx)
   ]
   @ check_index (Reg aux_reg) @
@@ -342,7 +360,7 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
     IMov (Reg RDX, loc_val);
     IMov (RegOffset (RAX, 0), Reg RDX);
     ISub ((Reg ret_reg), (Reg aux_reg));      (* RAX - 8*(i+1) *)
-    IAdd ((Reg ret_reg), Const 1L) ;
+    IAdd ((Reg ret_reg), tuple_tag) ;
   ]
 
 let compile_let_expr (compilexpr: expr -> env -> instruction list)
@@ -386,7 +404,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Get (tup, index) -> compile_get tup index env compile_expr
   | Set (tup, index, value) -> compile_set tup index value env compile_expr
   | Length tup -> compile_expr tup env @ type_checking (Reg ret_reg) TupleT @
-    [ ISub ((Reg ret_reg), Const 1L); IMov ((Reg ret_reg), RegOffset (RAX, 0))]
+    [ ISub ((Reg ret_reg), tuple_tag); IMov ((Reg ret_reg), RegOffset (RAX, 0))]
   | Void -> [INop]
 
 

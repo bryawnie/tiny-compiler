@@ -58,6 +58,7 @@ type instruction =
 | IExtern of string   (* Declaration of an external label*)
 | IEmpty              (* An empty line, for formatting purposes*)
 | INop                (* No operation *)
+| IComment of string  (* A comment for asm understanding*)
 
 
 (* A pretty printing for registers *)
@@ -128,6 +129,7 @@ let pp_instr : instruction Fmt.t =
   | IExtern lbl   -> Fmt.pf fmt "extern %s" lbl
   | IEmpty        -> Fmt.pf fmt ""
   | INop          -> Fmt.pf fmt "  nop"
+  | IComment comm -> Fmt.pf fmt ";; %s" comm
 
 
 (* A pretty printing for instruction list *)
