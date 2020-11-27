@@ -133,7 +133,9 @@ int sprintval(char *str, val v) {
       return sprintf(str, "%s", aux);
 
     case TYPE_TUPLE:
-      return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup", ")");
+      if (GET_TUPLE_SIZE(v) == 0)
+        return sprintf(str, "(tup)");
+      return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
 
     case TYPE_RECORD:
       return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
@@ -152,9 +154,8 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
   char *s = str;
   s = s + sprintf(s, "%s", pre);
   for (int i = 0; i < size; i++) {
-    *s++ = ' ';
     s = s + sprintval(s, a[i]);
-    // if (i + 1 < size)
+    if (i + 1 < size) *s++ = ' ';
       
   }
   s = s + sprintf(s, "%s", post);
@@ -211,8 +212,10 @@ void error(int errCode, val v) {
 
 /* DEFAULT FOREIGN FUNCTIONS */
 val print(val v) {
-  // val_to_str causes a segfault :C
-  //char *str = val_to_str(v);
+  // sprintf causes a segfault here :C
+  // char *str = val_to_str(v);
+  // printf("> %s\n", str);
+  // free(str);
   char *str;
   switch (typeofval(v)) {
     case TYPE_INT:
@@ -223,8 +226,7 @@ val print(val v) {
     printf("> %s\n", (v & BOOL_BIT) ? STR_TRUE : STR_FALSE);
     break;
 
-    /* There is no way to print tuples or records without using sprintf,
-      but that function causes a segfault when called at runtime*/
+    /* There is no way to print tuples or records without using sprintf */
     case TYPE_TUPLE:
     printf("> (tuple)\n"); 
     break;
@@ -237,7 +239,6 @@ val print(val v) {
     printf("> Unknown value: %#018lx", v);
     break;
   }
-  //free(str);
   return v;
 }
 
