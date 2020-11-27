@@ -1,0 +1,7 @@
+NAME: Implementing tuples
+DESCRIPTION: Tuple definition
+SRC:
+(let (t (tup 5 6 7 (tup 1 true 5) 4))
+    (get (get t 3) 1))
+EXPECTED:
+true

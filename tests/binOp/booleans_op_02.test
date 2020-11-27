@@ -1,9 +1,8 @@
 NAME: Boolean operations
 DESCRIPTION: De Morgan
 SRC:
-(let (p false)
-    (let (q false)
+(let ((p false) (q false))
     (and
         (not (and p q))
-        (or (not p) (not q)))))
+        (or (not p) (not q))))
 EXPECTED: true

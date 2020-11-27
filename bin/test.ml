@@ -69,8 +69,8 @@ let parse_tests =
       (parse_expr (sexp_from_string "(= 1 1)"))
       (BinOp (Eq, Num 1L, Num 1L)) ;
     check expr "Same expr"
-      (parse_expr (sexp_from_string "(let (x 5) x)"))
-      (Let ("x", Num 5L, Id "x")) ;
+      (parse_expr (sexp_from_string "(let ((x 5)) x)"))
+      (Let ([("x", Num 5L)], Id "x")) ;
     check expr "Same expr"
       (parse_expr (sexp_from_string "(if true 5 6)"))
       (If (Bool true, Num 5L, Num 6L)) ;
@@ -296,13 +296,13 @@ let interp_tests =
 
   let  test_interp_let () = 
     check value "let ( x 5 ) (+ x 6)" 
-      (interp (Let ("x", Num 5L, BinOp (Add, Id "x", Num 6L))))
+      (interp (Let ([("x", Num 5L)], BinOp (Add, Id "x", Num 6L))))
       (NumV 11L);
     check value "let (x (not true)) x" 
-      (interp  (Let ("x", UnOp (Not, Bool true), Id "x")))
+      (interp  (Let ([("x", UnOp (Not, Bool true))], Id "x")))
       (BoolV false);
     check value "let (x 5) (let (x (add1 x)) x)"
-      (interp (Let ("x", Num 5L, (Let ("x", UnOp (Add1, Id "x"), Id "x")))))
+      (interp (Let ([("x", Num 5L)], (Let ([("x", UnOp (Add1, Id "x"))], Id "x")))))
       (NumV 6L);
   in
 

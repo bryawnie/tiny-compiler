@@ -75,6 +75,8 @@ let extend_lenv (id: string) (v: value) (env: ienv): ienv =
 
 let extend_fenv (id: string) (params: string list) (body: expr) (env: ienv) : ienv =
   let lenv, fenv = env in lenv, (id, (params, body))::fenv
+
+
 let rec multi_extend_lenv (vars: string list) (vals: value list) (env: ienv) 
 : ienv =
   match vars, vals with
@@ -129,7 +131,10 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
         | _ -> Fmt.failwith "Error: Non boolean expr in Not sentence"
         end
       end
-  | Let (id, v, b) -> interp ~env:(extend_lenv id (interp ~env:env v) env) b
+  | Let (defs, b) -> 
+    let ids = List.map (fun (id,_) -> id) defs in
+    let vals = List.map (fun (_,v) -> (interp ~env:env v)) defs in
+    interp ~env:(multi_extend_lenv ids vals env) b
   | BinOp (op,l,r) -> 
       begin match op with 
       | Add -> liftNumV (Int64.add) (interp l ~env:env) (interp r ~env:env)
@@ -152,6 +157,7 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
   | Tuple _ -> Fmt.failwith "Error: Not implemented"
   | Get (_,_) -> Fmt.failwith "Error: Not implemented"
   | Set (_,_,_) -> Fmt.failwith "Error: Not implemented"
+  | Length (_) -> Fmt.failwith "Error: Not implemented"
 
 let rec fenv_from_decls (ds: decl list) (fenv: fenv): fenv =
   match ds with

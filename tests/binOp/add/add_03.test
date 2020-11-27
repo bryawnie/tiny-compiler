@@ -1,6 +1,6 @@
 NAME: Adition with let
 DESCRIPTION: increments a number
 SRC:
-(+ (+ 9 4) (+ 8 (let (x 5) (add1 x))))
+(+ (+ 9 4) (+ 8 (let ((x 5)) (add1 x))))
 EXPECTED:
 27

@@ -1,0 +1,9 @@
+NAME: Pattern Matching Tuples With Functions
+DESCRIPTION: Enunciado Example
+SRC:
+(def (f t)
+    (let (((tup x y z) t) (b 5))
+        (+ (+ x z) b)))
+(f (tup 1 2 3))
+EXPECTED:
+9
