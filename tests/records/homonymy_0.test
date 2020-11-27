@@ -1,0 +1,9 @@
+NAME: homonym records
+DESCRIPTION: definition of two record types with the same name should fail
+STATUS: CT error
+SRC:
+(record pancito palta tomate)
+(record pancito mantequilla)
+(void)
+EXPECTED:
+Duplicate function name: pancito

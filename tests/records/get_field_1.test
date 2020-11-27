@@ -1,0 +1,6 @@
+NAME: getter test
+SRC:
+(record r a b c)
+(let (thing (r 1 2 3)) (r-c thing))
+
+EXPECTED: 3

@@ -1,0 +1,5 @@
+NAME: Record type check function. 
+SRC:
+(record list head tail)
+(list? 0)
+EXPECTED: false
