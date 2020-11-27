@@ -73,34 +73,11 @@ dtype typeofval(val v) {
   return (dtype) 1 + (v & TAG_BITMASK)/2;
 }
 
-/*
-char * strtuple(int *p){
-  int size = *p >> 1;
-  char * strtmp = (char *) malloc(30*sizeof(char));
-  char * tupStr = (char *) malloc(30*sizeof(char));
-  sprintf(tupStr, "(tup");
-  for (int i=1; i<=size;i++){
-    sprintf(strtmp, " %ld", (int_v) *(p+2*i) >> 1 );
-    strcat(tupStr, strtmp);
-  }
-  free(strtmp);
-  strcat(tupStr,")");
-  return tupStr;
-}
-
-char * strintval(val v){
-  char * strOut = (char *) malloc(30*sizeof(char));
-  sprintf(strOut, "%ld", (int_v) v >> 1);
-  return strOut;
-}
-*/
-
 int arr_charcount(val *v, int size);
 /* Counts the maximum amount of characters required to print a value. */
 int charcount(val v) {
   
   // fprintf(stderr, "charcount: v=%ld\n", v);
-  
 
   switch (typeofval(v)) {
 
@@ -123,9 +100,6 @@ int charcount(val v) {
 
 int arr_charcount(val *a, int size) {
   
-  /* fprintf(stderr, "arr_charcount: a=%p, size=%d\n", a, size); */
-  
-
   int count = 0;
   for (int i = 0; i < size; i++) {
     count = count + charcount(a[i]) + 1;
@@ -148,13 +122,13 @@ int sprintval(char *str, val v) {
     case TYPE_BOOL:
       switch (v) {
         case VAL_TRUE:
-        aux = STR_TRUE;
+          aux = STR_TRUE;
         break;
         case VAL_FALSE:
-        aux = STR_FALSE;
+          aux = STR_FALSE;
         break;
         default:
-        return sprintf(str, "Unknown value: %#018lx", v);
+          return sprintf(str, "Unknown value: %#018lx", v);
       }
       return sprintf(str, "%s", aux);
 
@@ -199,40 +173,44 @@ char *val_to_str(val v) {
 
 void error(int errCode, val v) {
   
-  //fprintf(stderr, "error: %ld\n", v);
+  char *str = val_to_str(v);
 
   switch (errCode){
   case ERR_NOT_NUMBER:
-    fprintf(stderr, "Expected number, but got %s\n", val_to_str(v));
+    fprintf(stderr, "Expected number, but got %s\n", str);
     break;
   case ERR_NOT_BOOLEAN:
-    fprintf(stderr, "Expected boolean, but got %s\n", val_to_str(v));
+    fprintf(stderr, "Expected boolean, but got %s\n", str);
     break;
   case ERR_NOT_TUPLE:
-    fprintf(stderr, "Expected tuple, but got %s\n", val_to_str(v));
+    fprintf(stderr, "Expected tuple, but got %s\n", str);
     break;
   case ERR_NEG_INDEX:
-    fprintf(stderr, "Unexpected negative index %s\n", val_to_str(v-2));
+    fprintf(stderr, "Unexpected negative index %s\n", str);
     break;
   case ERR_INDEX_OVERFLOW:
-    fprintf(stderr, "Index out of bounds %s\n", val_to_str(v-2));
+    fprintf(stderr, "Index out of bounds %s\n", str);
     break;
   case ERR_NOT_RECORD:
-    fprintf(stderr, "Expected record, but got %s\n", val_to_str(v));
+    fprintf(stderr, "Expected record, but got %s\n", str);
     break;
   case ERR_RECORD_TYPE:
-    fprintf(stderr, "Got record with incorrect type: %s\n", val_to_str(v));
+    fprintf(stderr, "Got record with incorrect type: %s\n", str);
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);
     break;
   }
+
+  free(str);
+
   exit(errCode);
 }
 
 /* DEFAULT FOREIGN FUNCTIONS */
 val print(val v) {
-  // char *str = val_to_str(v); // This segaults for some reason
+  // val_to_str causes a segfault :C
+  //char *str = val_to_str(v);
   char *str;
   switch (typeofval(v)) {
     case TYPE_INT:
@@ -243,19 +221,13 @@ val print(val v) {
     printf("> %s\n", (v & BOOL_BIT) ? STR_TRUE : STR_FALSE);
     break;
 
+    /* There is no way to print tuples or records without using sprintf,
+      but that function causes a segfault when called at runtime*/
     case TYPE_TUPLE:
-    /* str = val_to_str(v);
-    printf("> %s\n", str);
-    free(str); */
-    printf("> (tuple)\n");
+    printf("> (tuple)\n"); 
     break;
 
     case TYPE_RECORD:
-    /*
-    str = val_to_str(v);
-    printf("> %s\n", str);
-    free(str);
-    */
     printf("> {record}\n");
     break;
 
@@ -263,7 +235,7 @@ val print(val v) {
     printf("> Unknown value: %#018lx", v);
     break;
   }
-  // free(str);
+  //free(str);
   return v;
 }
 
