@@ -1,0 +1,6 @@
+NAME: Boolean C Function
+SRC:
+(defsys xor bool bool -> bool)
+(@sys xor true true)
+EXPECTED:
+false

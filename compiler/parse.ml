@@ -135,6 +135,8 @@ let parse_type (sexp : sexp) : dtype =
   match sexp with
   | `Atom "int" -> IntT
   | `Atom "bool" -> BoolT
+  | `Atom "tup" -> TupleT
+  | `Atom "rec" -> RecordT
   | `Atom "any" -> AnyT
   | _ -> Fmt.failwith "Not a valid type: %a" CCSexp.pp sexp
 

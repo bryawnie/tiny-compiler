@@ -255,6 +255,14 @@ val min_of_8(val v1, val v2, val v3, val v4, val v5, val v6, val v7, val v8){
   return min(min(min(v1, v2), min(v3, v4)), min(min(v5, v6), min(v7, v8)));
 }
 
+val xor(bool_v v1, bool_v v2){
+  return v1 ^ v2;
+}
+
+val first_tup(int_v *a){
+  return a[1]>>1;
+}
+
 /* MAIN */
 int main(int argc, char** argv) {
   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));

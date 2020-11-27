@@ -87,17 +87,6 @@ let push_regs (n: int) (regs: arg list): instruction list =
 let pop_regs (n: int) (regs: arg list): instruction list =
   List.map (fun r -> IPop r) (take n regs)
 
-(* Prelude of callee to prepare a call *)
-let rec prepare_call ?(types= []) (ins: instruction list list) (regs: arg list) (check: bool) : instruction list list =
-  match ins, regs with
-  | [], _ -> []
-  | ins::tail_args, reg::tail_regs -> 
-    [ins @ (if check && (types !=[]) then type_checking (Reg ret_reg) (List.hd types) else []) @ [IMov (reg, Reg ret_reg)] ] 
-    @ prepare_call tail_args tail_regs check ~types:(if check then (List.tl types) else types)
-  | ins::tail_args, [] -> 
-    [ ins @ (if check && (types !=[]) then type_checking (Reg ret_reg) (List.hd types) else []) @ [IPush (Reg ret_reg)]] 
-    @ prepare_call tail_args [] check ~types:(if check then (List.tl types) else types)
-
 
 (* -----------------------------------
   |                UNOPS             |                
@@ -205,6 +194,43 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
 (* -----------------------------------
   |        FOREIGN FUNCTIONS (C)      |                
   ------------------------------------*)
+let decode (t: dtype): instruction list =
+  match t with
+  | IntT    -> [ISar (Reg ret_reg, Const 1L)]
+  | BoolT   -> [IShr (Reg ret_reg, Const 63L)]
+  | TupleT  -> [ISub (Reg ret_reg, tuple_tag)]
+  | RecordT -> [ISub (Reg ret_reg, record_tag)]
+  | AnyT    -> []
+
+let encode (t: dtype): instruction list =
+  match t with
+  | IntT    -> [ISal (Reg ret_reg, Const 1L)]
+  | BoolT   -> [IShl (Reg ret_reg, Const 63L); IAdd (Reg ret_reg, Const 1L)]
+  | TupleT  -> [IAdd (Reg ret_reg, tuple_tag)]
+  | RecordT -> [IAdd (Reg ret_reg, record_tag)]
+  | AnyT    -> []
+
+let rec save_args ?(types= []) (comp_exprs: instruction list list) (env: env): instruction list =
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  match comp_exprs, types with
+  | [], _ -> []
+  | compiled::tail, [] -> compiled @ [IMov (loc_arg, Reg ret_reg)] @ save_args tail new_env
+  | compiled::tail, t::ts -> compiled @ type_checking (Reg ret_reg) t @ decode t @
+    [IMov (loc_arg, Reg ret_reg)] @ save_args tail new_env ~types:ts
+
+let rec pass_args (num_args: int) (regs: arg list) (env: env): instruction list =
+  let new_env, loc_arg = extend_env (tmp_gensym ()) env in
+  match regs with
+    | [] -> 
+      if num_args > 0 then 
+        pass_args (num_args - 1) [] new_env @ [IMov (Reg aux_reg, loc_arg); IPush (Reg aux_reg)] 
+      else []
+    | x::xs -> 
+      if num_args > 0 then 
+        pass_args (num_args - 1) xs new_env @ [IMov (Reg aux_reg, loc_arg); IMov (x, Reg aux_reg)] 
+      else []
+
+
 let compile_sys_call (fname: string) (args: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let params, type_return = sys_lookup fname env in
@@ -217,15 +243,15 @@ let compile_sys_call (fname: string) (args: expr list) (env: env)
   else 
     (* type check *)
     let compiled_args = List.map (fun e -> compilexpr e env) args in 
+    let saved_args    = save_args compiled_args env ~types:params in
     let pushed_regs   = List.rev (push_regs arity arg_regs) in
-    let prepare_call  = List.concat 
-    (List.rev (prepare_call compiled_args arg_regs true ~types:params)) in 
+    let passed_args   = pass_args arity arg_regs env in
     let restore_rsp   = if arity > 6 
       then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
       else [] in
     let popped_regs   = pop_regs arity arg_regs in
-    pushed_regs @ prepare_call @ [ICall fname] @ restore_rsp @ popped_regs 
-    @ type_checking (Reg ret_reg) type_return
+    saved_args @ pushed_regs @ passed_args @ [ICall fname] @ restore_rsp @ popped_regs @ encode type_return
+    (* @ type_checking (Reg ret_reg) type_return *)
 
 
 (* -----------------------------------
@@ -240,25 +266,27 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
       "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
     else
       let compiled_args = List.map (fun expr -> compilexpr expr env) args in
+      let saved_args    = save_args compiled_args env in
       let pushed_regs   = List.rev (push_regs arity arg_regs) in
-      let prepare_call  = List.concat (List.rev (prepare_call compiled_args arg_regs false)) in 
+      let passed_args   = pass_args arity arg_regs env in
       let restore_rsp   = if arity > 6 
         then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
         else [] in
       let popped_regs   = pop_regs arity arg_regs in
-      pushed_regs @ prepare_call @ [ICall flbl] @ restore_rsp @ popped_regs    
+      saved_args @ pushed_regs @ passed_args @ [ICall flbl] @ restore_rsp @ popped_regs    
 
 (* -----------------------------------
   |              TUPLES              |                
   ------------------------------------*)
-(* Compiles and add an element to tuple *)
+(* Compiles an element that will be assigned to a Tuple
+  saving it in stack *)
 let comp_tuple_elem (exp: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list  * env =
   let new_env, loc_arg = extend_env (tmp_gensym ()) env in
   let compiled_element = compilexpr exp new_env in
   (compiled_element @ [IMov (loc_arg, Reg ret_reg)], new_env)
 
-(* Compiles and add the elements *)
+(* Compiles every value in tuple *)
 let rec comp_tuple_elems (elems: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =
   match elems with
@@ -268,6 +296,7 @@ let rec comp_tuple_elems (elems: expr list) (env: env)
     let compiled_src = comp_tuple_elems tail new_env compilexpr in
     compiled_elem @ compiled_src
 
+(* Assigns the tuple values *)
 let rec assign_tuple_values (index: int) (size: int) (env: env) : instruction list =
   if index > size then [] else
   let new_env, loc_arg = extend_env (tmp_gensym ()) env in
@@ -295,7 +324,7 @@ let compile_tuple (elems: expr list) (env: env)
   @ type_checking (Reg ret_reg) TupleT
 
 (* -----------------------------------
-  |               GET                |                
+  |               GET                |
   ------------------------------------*)
 (* Checks positive index and avoid overflows *)
 let check_index (index: arg) : instruction list =
@@ -335,6 +364,10 @@ let compile_get (tup: expr) (index: expr) (env: env)
     IMov ((Reg ret_reg), RegOffset (RAX, 0))
   ]
 
+(* -----------------------------------
+  |               SET                |
+  ------------------------------------*)
+
 (* Compiles set expressions for tuples *)
 let compile_set (tup: expr) (index: expr) (value: expr) (env: env) 
   (compilexpr: expr -> env -> instruction list) : instruction list = 
@@ -363,13 +396,17 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
     IAdd ((Reg ret_reg), tuple_tag) ;
   ]
 
+(* -----------------------------------
+  |               LET                |
+  ------------------------------------*)
+(* Introduces a new id in scope *)
 let compile_let_expr (compilexpr: expr -> env -> instruction list)
   (env: env) (id: string) (value: expr): instruction list * env =
   let (new_env, loc)  = extend_env id env in
   let compiled_val    = compilexpr value env in
   compiled_val @ [ IMov(loc, Reg ret_reg) ], new_env
 
-
+(* Introduces muliple new ids in scope *)
 let rec compile_let_exprs (compilexpr: expr -> env -> instruction list) 
   (env: env) (pairs: (string*expr) list): instruction list * env =
   match pairs with
@@ -418,8 +455,8 @@ let rec varcount (e:expr): int =
   | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
   | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
-  | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex)
-  | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex)
+  | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex
+  | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex
   | Tuple exprs -> List.fold_left max 0 (List.map varcount exprs) + List.length exprs
   | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
   | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
