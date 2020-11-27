@@ -1,8 +1,7 @@
 NAME: Enunciado print test
 DESCRIPTION: from Enunciado
 SRC:
-(defsys print any -> any)
-(let ((x (@sys print (+ 2 3))))
+(let (x (@sys print (+ 2 3)))
   (+ x 1))
 EXPECTED:
 > 5

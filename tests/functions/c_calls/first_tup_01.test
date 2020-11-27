@@ -1,0 +1,7 @@
+NAME: C calls tuples
+DESCRIPTION: tests functions with tuples
+SRC:
+(defsys first_tup tup -> int)
+(@sys first_tup (tup 1 2 3))
+EXPECTED:
+1

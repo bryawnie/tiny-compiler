@@ -1,0 +1,12 @@
+NAME: field getter
+SRC:
+(record point2d x y)
+(def (square x) (* x x))
+(def (norm2 p)
+    (+  (square (point2d-x p))
+        (square (point2d-y p))))
+
+(let (p (point2d 5 7))
+    (norm2 p))
+
+EXPECTED: 74

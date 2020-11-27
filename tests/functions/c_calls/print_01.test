@@ -1,7 +1,6 @@
 NAME: Testing print
 DESCRIPTION: if it works i will dance
 SRC:
-(defsys print any -> any)
 (@sys print 5)
 EXPECTED:
 > 5

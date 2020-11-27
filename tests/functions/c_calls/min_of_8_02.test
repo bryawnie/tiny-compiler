@@ -2,7 +2,6 @@ NAME: Testing min_of_8
 DESCRIPTION: tests functions with 8 arguments
 SRC:
 (defsys min_of_8 int int int int int int int int -> int)
-(defsys print any -> any)
 (* 5
     (add1 
         (@sys min_of_8 

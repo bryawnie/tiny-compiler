@@ -1,8 +1,0 @@
-NAME: Testing min
-DESCRIPTION: tests functions with 2 arguments
-STATUS: RT error
-SRC:
-(defsys min int int -> bool)
-(@sys min 3 2)
-EXPECTED:
-Expected boolean, but got 2
