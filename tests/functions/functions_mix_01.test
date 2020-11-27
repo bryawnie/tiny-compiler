@@ -1,7 +1,6 @@
 NAME: multiple functions 
 SRC:
 (def (sum x y z) (+ (+ x y) z))
-(defsys print any -> any)
 (defsys min int int -> int)
 (@sys min (@sys print (sum 2 3 4)) 8)
 EXPECTED:

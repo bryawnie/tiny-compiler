@@ -372,7 +372,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Num n   ->  [ IMov ((Reg ret_reg), Const (encode_int n)) ]
   | Bool p  ->  [ IMov ((Reg ret_reg), Const (encode_bool p)) ]
   | UnOp (op, e)  -> compile_unop (compile_expr e env) op
-  | Id x    ->  [ IMov (ret_reg, let_lookup x env) ]
+  | Id x    ->  [ IMov (Reg ret_reg, let_lookup x env) ]
   | Let (vals,b) -> 
       let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
       compiled_vals @ (compile_expr b new_env)
