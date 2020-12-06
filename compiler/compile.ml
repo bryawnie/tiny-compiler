@@ -28,13 +28,8 @@ let neg_index = Const 4L
 let index_overflow = Const 5L
 let not_a_record = Const 6L
 let record_type_error = Const 7L
+let arity_mismatch_error = Const 8L
 
-(* TYPE TAGS *)
-let int_tag = Const 0L (* All values ending in 0 are integers *)
-let bool_tag = Const 1L (* 001 - boolean value *)
-let tuple_tag = Const 3L (* 011 - tuple pointer *)
-let record_tag = Const 5L (* 101 - record pointer *) 
-let tag_bitmask = Const 7L (*111*)
 
 (* other constants *)
 let rax_error_handler = "error_type_handler"
@@ -53,7 +48,7 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
   let tag_check error_code type_tag =
     [IMov ((Reg err_code_reg), error_code) ; IMov ((Reg type_code_reg), register) ;
     IAnd ((Reg type_code_reg), tag_bitmask) ; ICmp ((Reg type_code_reg), type_tag) ;
-    IJnz "error_type_handler"]
+    IJnz (Label "error_type_handler")]
   in
   let beg_comm = [IComment (Fmt.str "Begin Type Checking %s" @@ str_type expected_type)] in
   let end_comm = [IComment (Fmt.str "End Type Checking %s" @@ str_type expected_type) ] in
@@ -62,7 +57,7 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
   | IntT -> [
     ITest (register, Const 1L) ; 
     IMov ((Reg err_code_reg), not_a_number) ;
-    IJnz "error_type_handler";
+    IJnz (Label "error_type_handler");
   ]
   | BoolT -> tag_check not_a_boolean bool_tag
   | TupleT -> tag_check not_a_tuple tuple_tag
@@ -125,7 +120,7 @@ let compile_shortcut_binop (l: expr) (r: expr) (env: env) (lbl: string) (skip_on
   let compare = [
     IMov ((Reg aux_reg), Const (encode_bool skip_on)) ;
     ICmp ((Reg ret_reg), (Reg aux_reg)) ; 
-    IJe lbl
+    IJe (Label lbl)
   ] in
   compiler l env @ type_checking (Reg ret_reg) BoolT @ compare @ 
   compiler r env @ type_checking (Reg ret_reg) BoolT @ compare
@@ -162,11 +157,11 @@ let compile_binop (op: binOp) (l: expr) (r: expr) (env: env)
     | Less -> 
       let less_lbl = less_gensym () in
       compile_binop_preamble l IntT r IntT env compiler 
-      @ compile_binop_comparator less_lbl (IJl less_lbl)
+      @ compile_binop_comparator less_lbl (IJl (Label less_lbl))
     | Eq -> (* Doesn't need a type checking *)
       let eq_lbl =  equal_gensym () in
       compile_binop_preamble l AnyT r AnyT env compiler
-      @ compile_binop_comparator eq_lbl (IJe eq_lbl)
+      @ compile_binop_comparator eq_lbl (IJe (Label eq_lbl))
     (* And & Or have shortucut semantics *)
     | And -> compile_shortcut_binop l r env (and_gensym ()) false compiler
     | Or ->  compile_shortcut_binop l r env (or_gensym ())  true  compiler
@@ -182,11 +177,11 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
   let done_lbl  = done_gensym () in 
   let preamble  = [
     ICmp ((Reg ret_reg), Const false_encoding);
-    IJe  (false_lbl)
+    IJe  (Label false_lbl)
   ] in
   preamble
   @ (compile t env)
-  @ [ IJmp (done_lbl); ILabel(false_lbl) ]
+  @ [ IJmp (Label done_lbl); ILabel (false_lbl) ]
   @ (compile f env)
   @ [ ILabel (done_lbl) ]
  
@@ -250,30 +245,47 @@ let compile_sys_call (fname: string) (args: expr list) (env: env)
       then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
       else [] in
     let popped_regs   = pop_regs arity arg_regs in
-    saved_args @ pushed_regs @ passed_args @ [ICall fname] @ restore_rsp @ popped_regs @ encode type_return
+    saved_args @ pushed_regs @ passed_args @ [ICall (Label fname)] @ restore_rsp @ popped_regs @ encode type_return
     (* @ type_checking (Reg ret_reg) type_return *)
 
 
 (* -----------------------------------
   |       FIRST ORDER FUNCTIONS      |                
   ------------------------------------*)
+let check_arity (arity: arg) (args: int) : instruction list =
+  [ (* Negative Index Error *)
+    IComment "Begin Check: Function Arity";
+    IMov ((Reg err_code_reg), arity_mismatch_error) ; 
+    IMov ((Reg type_code_reg), arity) ;
+    ICmp ((Reg type_code_reg), Const (encode_int (Int64.of_int args)));     
+    IJne  (Label "error_arity_handler");
+    IComment "End Check: Function Arity";
+  ]
+  
+
 let compile_fof_call  (fname: string) (args: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =  
-  let flbl, arity = fun_lookup fname env in
-  let argc = List.length args in
-  if (argc != arity)
-    then Fmt.failwith 
-      "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
-    else
-      let compiled_args = List.map (fun expr -> compilexpr expr env) args in
-      let saved_args    = save_args compiled_args env in
-      let pushed_regs   = List.rev (push_regs arity arg_regs) in
-      let passed_args   = pass_args arity arg_regs env in
-      let restore_rsp   = if arity > 6 
-        then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
-        else [] in
-      let popped_regs   = pop_regs arity arg_regs in
-      saved_args @ pushed_regs @ passed_args @ [ICall flbl] @ restore_rsp @ popped_regs    
+  let loc = let_lookup fname env in
+  let arity = List.length args in
+  
+  let compiled_args = List.map (fun expr -> compilexpr expr env) args in
+  let saved_args    = save_args compiled_args env in
+  let pushed_regs   = List.rev (push_regs arity arg_regs) in
+  let passed_args   = pass_args arity arg_regs env in
+  let restore_rsp   = if arity > 6 
+    then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+    else [] in
+  let popped_regs   = pop_regs arity arg_regs in
+  saved_args @
+  [
+    IMov (Reg ret_reg, loc);                        (* The Closure *)
+    ISub (Reg ret_reg, function_tag);               (* Untag *)
+    IMov (Reg aux_reg, RegOffset (ret_reg, 0))      (* Arity *)
+  ] @ check_arity (Reg aux_reg) (List.length args) @ pushed_regs @ passed_args @
+  [
+    IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
+    ICall (Reg ret_reg)
+  ] @ restore_rsp @ popped_regs    
 
 (* -----------------------------------
   |              TUPLES              |                
@@ -333,13 +345,13 @@ let check_index (index: arg) : instruction list =
     IMov ((Reg err_code_reg), neg_index) ; 
     IMov ((Reg type_code_reg), index) ;
     ICmp (index, Const 0L);     
-    IJl  "error_index_handler";
+    IJl  (Label "error_index_handler");
     IComment "End Check: Positive Index for Tuples";
   ] @ [ (* Index out of bounds *)
     IComment "Begin Check: Index out of Bounds";
     IMov ((Reg err_code_reg), index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
-    IJg "error_index_handler";
+    IJg (Label "error_index_handler");
     IComment "End Check: Index out of Bounds";
   ]
 
@@ -463,10 +475,26 @@ let rec varcount (e:expr): int =
   | Length tuple -> varcount tuple
   | Void -> 0
 
+let rec varcount_funs (ds: decl list): int =
+  match ds with 
+  | [] -> 0
+  | d::ds ->
+    match d with
+    | FunDef (_, _, _) -> 4 + varcount_funs ds
+    | _ -> varcount_funs ds
+
+let varcount_prog (p: prog): int =
+  let Program (decs, exp) = p in
+  varcount exp + varcount_funs decs
+
 (* 
   Gets the necesary space to save local vars 
   Uses a sound overaproximate.
 *)
+let stack_offset_for_prog (p: prog): int =
+  let vars = varcount_prog p in
+  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
+
 let stack_offset_for_local (exp: expr): int =
   let vars = varcount exp in
   if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
@@ -476,13 +504,19 @@ let error_type_handler =
  [ILabel "error_type_handler";
   IMov (Reg RSI, (Reg ret_reg));
   IMov (Reg RDI, (Reg err_code_reg));
-  ICall "error"]
+  ICall (Label "error")]
 
 let error_index_handler =
   [ILabel "error_index_handler";
     IMov (Reg RSI, (Reg type_code_reg));
     IMov (Reg RDI, (Reg err_code_reg));
-    ICall "error"]
+    ICall (Label "error")]
+  
+let error_arity_handler =
+  [ILabel "error_arity_handler";
+    IMov (Reg RSI, (Reg type_code_reg));
+    IMov (Reg RDI, (Reg err_code_reg));
+    ICall (Label "error")]
 
 (* Callee - Save  @ Init *)
 let callee_prologue = [
@@ -499,13 +533,22 @@ let callee_epilogue = [
 (* Compiles definitions for first order functions *)
 let compile_fundef (fname: string) (params: string list) (body: expr) (env: env): 
   instruction list =
-  let _, fenv, senv = env in
-  let flbl, _ = fun_lookup fname env in
+  let _, senv = env in
+  let flbl = fname in
   let lenv = let_env_from_params params empty_env in
   let stack_offset = Int64.of_int (stack_offset_for_local body) in
-  [IEmpty ; ILabel flbl] @ callee_prologue 
+  [IJmp (Label ("end_function_"^flbl)) ;IEmpty;
+   IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+   IComment ("==> "^fname);
+   IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+  ILabel flbl ]
+  @ callee_prologue 
   @ [ISub (Reg RSP, Const stack_offset)]
-  @ compile_expr body (lenv, fenv, senv) @ callee_epilogue @ [IRet]
+  @ compile_expr body (lenv, senv) @ callee_epilogue 
+  @ [IRet; IEmpty; ILabel ("end_function_"^flbl)]
+
+
+(* RECORD COMPILER BEGIN
 
 (* compiles the constructor function for a record *)
 let compile_rec_constructor (id: string) (id_code: int64) (arity: int) 
@@ -594,6 +637,8 @@ let compile_recdef (id: string) (fields: string list) (env: env) : instruction l
   let type_checker = compile_rec_typechecker id rec_id_code env in
   constructor @ getters @ type_checker
 
+RECORD COMPILER END *)
+
 (* Compiles a declaration for a function. Returns a instr list for compiled
 functions and another for foreign function "extern"s *)
 let compile_declaration (dec: decl) (env: env) 
@@ -602,7 +647,7 @@ let compile_declaration (dec: decl) (env: env)
   | FunDef (fname, params, body) -> 
     compile_fundef fname params body env @ funs , exts
   | SysFunDef (fname, _, _) -> funs, [IExtern fname] @ exts
-  | RecDef (id, fields) -> compile_recdef id fields env @ funs, exts
+  | RecDef (_, _) -> (*compile_recdef id fields env @*) funs, exts
 
 (* Compiles declarations for functions *)  
 let rec compile_declarations (decls: decl list) (env: env) :
@@ -618,22 +663,62 @@ let default_sys_env : sys_env =
   ["print", ([AnyT], AnyT) ;
   "raw_print", ([AnyT], AnyT)]
 
+let exists_in_env (fname: string) (env: env): bool =
+  let fenv, _ = env in 
+  List.mem_assoc fname fenv 
+
+let rec add_funs_env (ds: decl list) (env: let_env) : instruction list * let_env =
+  match ds with
+  | [] -> [], env
+  | d::tail ->
+    match d with
+    | FunDef (fname, params, _) ->
+      if (List.mem_assoc fname env) then 
+        (Fmt.failwith "Duplicate function name: %s" fname)
+      else
+        let new_env, loc = extend_let_env fname env in
+        let arity = (Int64.of_int (List.length params)) in
+        let instrs, updated_env = add_funs_env tail new_env in
+        [
+          IComment ("Introducing Function "^fname^" to Stack");
+          IMov (RegOffset (heap_reg, 0), Const (encode_int arity)); (* Arity *)
+          IMov (RegOffset (heap_reg, 1), Label fname);              (* Label *)
+          IMov (RegOffset (heap_reg, 2), Const 0L);                 (* Free-Vars *)
+          IMov (Reg RAX, Reg heap_reg);
+          IAdd (Reg RAX, function_tag);
+          IAdd (Reg heap_reg, Const 32L);
+          IMov (loc, Reg RAX);
+          IComment "Done";
+          IEmpty;
+        ] @instrs, updated_env
+    | _ -> add_funs_env tail env
+
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
-      let fenv = fun_env_from_decls decs empty_fun_env in
+      let fun_to_stack, fenv  = add_funs_env decs empty_env in
+      (* let fenv = fun_env_from_decls decs empty_fun_env in *)
       let senv = sys_env_from_decls decs default_sys_env in
-      let env  = empty_env, fenv, senv in
+      let env  = fenv, senv in
       let functions, externs = compile_declarations decs env in
       let instrs = compile_expr exp env in
-      let stack_offset = Int64.of_int (stack_offset_for_local exp) in
+      let stack_offset = Int64.of_int (stack_offset_for_prog p) in
       Fmt.pf fmt 
 "section .text
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;      EXTERNAL C FUNCTIONS     ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Also called system functions
 extern error
 extern print
 extern raw_print
 %a
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;          MAIN PROGRAM         ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 global our_code_starts_here
 our_code_starts_here:
 %a
@@ -642,9 +727,11 @@ our_code_starts_here:
   mov  R11, 0xfffffffffffffff8  ;; R11 is now 11111...1000
   and  R15, R11                 ;; Round back down
 %a" 
-      pp_instrs externs pp_instrs callee_prologue pp_instrs (
-      [ISub (Reg RSP, Const stack_offset)] @ instrs @ callee_epilogue @ [IRet]
-      @ error_type_handler @ error_index_handler @ functions)
+      pp_instrs externs pp_instrs callee_prologue 
+      pp_instrs (
+      [ISub (Reg RSP, Const stack_offset)] @ functions @ fun_to_stack 
+      @ instrs @ callee_epilogue @ [IRet]
+      @ error_type_handler @ error_index_handler @ error_arity_handler) 
 
 (* The Pipeline *)
 let compile_src = 

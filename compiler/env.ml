@@ -29,7 +29,7 @@ let pp_memloc fmt loc =
 type let_env = (string * memloc) list
 (* An "fenv" contains function definitions.
                 env_name * (label * arity) *)
-type fun_env = (string * (string  * int)) list
+(* type fun_env = (string * (string  * int)) list *)
 (* sys_env contains foreign function definitions *)
 type sys_env = (string * (dtype list * dtype)) list
 (* rec_env contains record definition data *)
@@ -40,23 +40,23 @@ An environment is composed of three separate namespaces:
   > functions
   > foreign functions
 *)
-type env = let_env * fun_env * sys_env (* * rec_env *)
+type env = let_env * (* fun_env * *) sys_env (* * rec_env *)
 
 (* Alias for empty environment *)
 let empty_env : let_env = []
-let empty_fun_env : fun_env = []
+(* let empty_fun_env : fun_env = [] *)
 let empty_sys_env : sys_env = []
 
 (* pretty printers *)
-let pp_fun_env fmt lenv =
-  (Fmt.list (Fmt.pair Fmt.string Fmt.int)) fmt lenv 
+(* let pp_fun_env fmt lenv =
+  (Fmt.list (Fmt.pair Fmt.string Fmt.int)) fmt lenv  *)
 
-let pp_let_env fmt fenv =
+let pp_env fmt fenv =
   (Fmt.list (Fmt.pair Fmt.string pp_memloc)) fmt fenv
 
-let pp_env fmt env =
+(* let pp_env fmt env =
   match env with lenv, fenv ->
-    Fmt.pf fmt "variables=%a, functions=%a" pp_let_env lenv pp_fun_env fenv
+    Fmt.pf fmt "variables=%a, functions=%a" pp_let_env lenv pp_fun_env fenv *)
 
 
 (*------------------
@@ -66,21 +66,14 @@ let pp_env fmt env =
 (* looks up a let-bound variable in an environment. Returns its memory
 location if present, fails with an "Unbound identifier" error if not.*)
 let let_lookup (name: string) (env: env) : arg =
-  match env with lenv, _ , _->
+  match env with lenv , _->
     if List.mem_assoc name lenv then memloc_to_arg @@ List.assoc name lenv
     else Fmt.failwith "Unbound identifier: %s" name
-
-(* looks up a function definition in an environment. Returns its arity
-if present; fails with an "Undefined function" error if not. *)
-let fun_lookup (name: string) (env: env) : string * int =
-  match env with _, fenv, _ -> 
-    if List.mem_assoc name fenv then List.assoc name fenv
-    else Fmt.failwith "Undefined function: %s" name
 
 (* looks up a system (foreign) function in an env. Returns its parameter
 and return types; fails with and "Undefined system function" error if not.*)
 let sys_lookup (name: string) (env: env) : (dtype list * dtype) =
-  match env with _ , _, senv ->
+  match env with _ , senv ->
     if List.mem_assoc name senv then List.assoc name senv 
     else Fmt.failwith "Undefined system function: %s" name
 
@@ -152,9 +145,9 @@ let extend_let_env (name: string) (env: let_env) : (let_env * arg) =
 
 (* Extends an environment with a new let-bound variable *)
 let extend_env (name: string) (env: env) : (env * arg) =
-  match env with lenv, fenv, senv ->
+  match env with lenv, senv ->
   let new_lenv, arg = extend_let_env name lenv in
-  ((new_lenv, fenv, senv), arg)
+  ((new_lenv, senv), arg)
 
 (* Extends a let_env with function parameters *)
 let extend_arg_env (name: string) (env: let_env) : (let_env * arg) =
@@ -162,10 +155,10 @@ let extend_arg_env (name: string) (env: let_env) : (let_env * arg) =
   ((name, loc)::env, memloc_to_arg loc)
 
 (* Extends a fun_env with a new function *)
-let extend_fun_env (fname: string) (flabel: string) (arity: int) (fenv: fun_env) : fun_env =
+(* let extend_fun_env (fname: string) (flabel: string) (arity: int) (fenv: fun_env) : fun_env =
   if List.mem_assoc fname fenv then
     Fmt.failwith "Duplicate function name: %s" fname
-  else (fname, (flabel, arity))::fenv
+  else (fname, (flabel, arity))::fenv *)
 
 (* Extends a sys_env with a new function *)
 let extend_sys_env (fname: string) (params: dtype list) (return_type: dtype)
@@ -181,11 +174,11 @@ let extend_rec_env (id: string) (fields: string list) (renv: rec_env) :
     Fmt.failwith "Duplicate record definition: %s" id
   else (id, (List.length renv, fields))::renv *)
 
-let rec multi_extend_fun_env (defs: (string * string * int) list) (fenv: fun_env) : fun_env =
+(* let rec multi_extend_fun_env (defs: (string * string * int) list) (fenv: fun_env) : fun_env =
   match defs with
   | [] -> fenv
   | (name, label, arity)::tail -> 
-    multi_extend_fun_env tail (extend_fun_env name label arity fenv)
+    multi_extend_fun_env tail (extend_fun_env name label arity fenv) *)
 
 
 (*--------------------------
@@ -202,7 +195,7 @@ let rec let_env_from_params (params: string list) (env: let_env) : let_env =
 
 
 (* construct a fun_env from function declarations *)
-let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
+(* let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
   match ds with
   | [] -> fenv
   | d::tail -> 
@@ -221,7 +214,7 @@ let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
       in
       fun_env_from_decls tail (
         multi_extend_fun_env ([cons;type_checker]@get) fenv) 
-    | _-> fun_env_from_decls tail fenv
+    | _-> fun_env_from_decls tail fenv *)
 
 (* construct a sys_env from function declarations *)
 let rec sys_env_from_decls (ds: decl list) (senv: sys_env) : sys_env =

@@ -1,7 +1,7 @@
 NAME: function arity check
-STATUS: CT error
+STATUS: RT error
 SRC:
 (def (f x y) (+ x y))
 (f 1 2 3)
 EXPECTED:
-Arity mismatch: function f expects 2 arguments but got 3
+Arity mismatch: function expects 2 arguments

@@ -1,0 +1,6 @@
+NAME: defining and using multiple functions
+SRC:
+(def (double x) (+ x x))
+(def (triple x) (+ x (+ x x)))
+(triple (double 1))
+EXPECTED: 6
