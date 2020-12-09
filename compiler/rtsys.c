@@ -50,7 +50,8 @@ enum error_code {
   ERR_NEG_INDEX,
   ERR_INDEX_OVERFLOW,
   ERR_NOT_RECORD,
-  ERR_RECORD_TYPE
+  ERR_RECORD_TYPE,
+  ERR_ARITY_MISMATCH
 };
 typedef enum error_code errcode;
 
@@ -199,6 +200,9 @@ void error(int errCode, val v) {
     break;
   case ERR_RECORD_TYPE:
     fprintf(stderr, "Got record with incorrect type: %s\n", str);
+    break;
+  case ERR_ARITY_MISMATCH:
+    fprintf(stderr, "Arity mismatch: function expects %ld arguments\n", int_value >> 1);
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);

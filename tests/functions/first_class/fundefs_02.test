@@ -1,0 +1,14 @@
+NAME: functions as parameters (2 args)
+SRC:
+(def (get15 it add)
+    (add (it 0) (it 0)))
+
+(def (incr x)
+    (+ x 1))
+
+(def (sum x y)
+    (+ x y))
+
+(get15 incr sum)
+
+EXPECTED: 15

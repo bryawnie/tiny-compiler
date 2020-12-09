@@ -169,6 +169,8 @@ let rec fenv_from_decls (ds: decl list) (fenv: fenv): fenv =
       fenv_from_decls tail @@ (fname, (params, body))::fenv
   | SysFunDef (_, _, _):: _ ->
     Fmt.failwith "Interpreter does not support foreign functions (defsys)."
+  | RecDef (_,_)::_ ->
+    Fmt.failwith "Interpreter does not support records."
 
 let interp_prog p : value = 
   let (Program (decls, exp)) = p in
