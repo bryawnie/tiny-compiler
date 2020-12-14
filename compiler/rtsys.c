@@ -20,6 +20,7 @@ const val TAG_INT = 0x0;
 const val TAG_BOOL = 0x1;
 const val TAG_TUPLE = 0x3;
 const val TAG_RECORD = 0x5;
+const val TAG_CLOSURE = 0x7;
 
 /* Constants */
 const val BOOL_BIT = (0x1UL << 63);
@@ -51,7 +52,8 @@ enum error_code {
   ERR_INDEX_OVERFLOW,
   ERR_NOT_RECORD,
   ERR_RECORD_TYPE,
-  ERR_ARITY_MISMATCH
+  ERR_ARITY_MISMATCH,
+  ERR_NOT_CLOSURE
 };
 typedef enum error_code errcode;
 
@@ -203,6 +205,9 @@ void error(int errCode, val v) {
     break;
   case ERR_ARITY_MISMATCH:
     fprintf(stderr, "Arity mismatch: function expects %ld arguments\n", int_value >> 1);
+    break;
+  case ERR_NOT_CLOSURE:
+    fprintf(stderr, "Expected a function, got %s\n", str);
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);

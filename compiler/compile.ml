@@ -29,6 +29,7 @@ let index_overflow = Const 5L
 let not_a_record = Const 6L
 let record_type_error = Const 7L
 let arity_mismatch_error = Const 8L
+let not_a_closure = Const 9L
 
 
 (* other constants *)
@@ -41,6 +42,7 @@ let str_type (t: dtype): string =
   | BoolT   -> "Boolean"
   | TupleT  -> "Tuple"
   | RecordT -> "Record"
+  | ClosureT -> "Function"
   | AnyT    -> "Any"
 
 (* This function handles the request for a type checking *)
@@ -62,6 +64,7 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
   | BoolT -> tag_check not_a_boolean bool_tag
   | TupleT -> tag_check not_a_tuple tuple_tag
   | RecordT -> tag_check not_a_record record_tag
+  | ClosureT -> tag_check not_a_closure function_tag
   | AnyT -> [] (* AnyT == no typecheck *)
   end
   @ end_comm
@@ -195,6 +198,7 @@ let decode (t: dtype): instruction list =
   | BoolT   -> [IShr (Reg ret_reg, Const 63L)]
   | TupleT  -> [ISub (Reg ret_reg, tuple_tag)]
   | RecordT -> [ISub (Reg ret_reg, record_tag)]
+  | ClosureT -> [ISub (Reg ret_reg, function_tag)]
   | AnyT    -> []
 
 let encode (t: dtype): instruction list =
@@ -203,6 +207,7 @@ let encode (t: dtype): instruction list =
   | BoolT   -> [IShl (Reg ret_reg, Const 63L); IAdd (Reg ret_reg, Const 1L)]
   | TupleT  -> [IAdd (Reg ret_reg, tuple_tag)]
   | RecordT -> [IAdd (Reg ret_reg, record_tag)]
+  | ClosureT -> [IAdd (Reg ret_reg, function_tag)]
   | AnyT    -> []
 
 let rec save_args ?(types= []) (comp_exprs: instruction list list) (env: env): instruction list =
@@ -267,7 +272,6 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =  
   let loc = let_lookup fname env in
   let arity = List.length args in
-  
   let compiled_args = List.map (fun expr -> compilexpr expr env) args in
   let saved_args    = save_args compiled_args env in
   let pushed_regs   = List.rev (push_regs arity arg_regs) in
@@ -276,12 +280,14 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
     else [] in
   let popped_regs   = pop_regs arity arg_regs in
+  type_checking loc ClosureT @
   saved_args @
   [
     IMov (Reg ret_reg, loc);                        (* The Closure *)
     ISub (Reg ret_reg, function_tag);               (* Untag *)
     IMov (Reg aux_reg, RegOffset (ret_reg, 0))      (* Arity *)
-  ] @ check_arity (Reg aux_reg) (List.length args) @ pushed_regs @ passed_args @
+  ] 
+  @ check_arity (Reg aux_reg) (List.length args) @ pushed_regs @ passed_args @
   [
     IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
     ICall (Reg ret_reg)
@@ -436,25 +442,59 @@ let rec compile_let_exprs (compilexpr: expr -> env -> instruction list)
 (* THE MAIN compiler function *)
 let rec compile_expr (e : expr) (env: env) : instruction list =
   match e with 
-  | Num n   ->  [ IMov ((Reg ret_reg), Const (encode_int n)) ]
-  | Bool p  ->  [ IMov ((Reg ret_reg), Const (encode_bool p)) ]
-  | UnOp (op, e)  -> compile_unop (compile_expr e env) op
-  | Id x    ->  [ IMov (Reg ret_reg, let_lookup x env) ]
+  | Num n   ->  
+      [ IComment "Num (value)" ;
+      IMov ((Reg ret_reg), Const (encode_int n)) ]
+  | Bool p  ->  
+      [ IComment "Bool (value)" ;
+      IMov ((Reg ret_reg), Const (encode_bool p)) ]
+  | UnOp (op, e)  -> 
+    [IComment "UnOp: unary operator"] @
+    compile_unop (compile_expr e env) op
+    @ [IComment "end unOp"]
+  | Id x    ->  
+    [ IComment "Id: identifier lookup";
+    IMov (Reg ret_reg, let_lookup x env) ;
+    IComment "end Id"]
   | Let (vals,b) -> 
       let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
-      compiled_vals @ (compile_expr b new_env)
-  | BinOp (op, l, r) -> compile_binop op l r env compile_expr
-  | If (c, t, f) -> (compile_expr c env) 
+      IComment "let-binding"::compiled_vals @ (compile_expr b new_env)
+      @ [IComment "end let-binding"]
+  | BinOp (op, l, r) -> 
+    IComment "BinOp application"::
+    compile_binop op l r env compile_expr
+    @ [IComment "end BinOp"]
+  | If (c, t, f) -> IComment "If statement"::(compile_expr c env) 
       @ type_checking (Reg ret_reg) BoolT 
       @ compile_if compile_expr t f env
-  | Sys (fname, args) -> compile_sys_call fname args env compile_expr
-  | App (fname, args) -> compile_fof_call fname args env compile_expr
-  | Tuple exprs -> compile_tuple exprs env compile_expr
-  | Get (tup, index) -> compile_get tup index env compile_expr
-  | Set (tup, index, value) -> compile_set tup index value env compile_expr
-  | Length tup -> compile_expr tup env @ type_checking (Reg ret_reg) TupleT @
-    [ ISub ((Reg ret_reg), tuple_tag); IMov ((Reg ret_reg), RegOffset (RAX, 0))]
-  | Void -> [INop]
+      @ [IComment "end If"]
+  | Sys (fname, args) -> 
+    [IComment (Printf.sprintf "Sys: %s" fname)]
+    @ compile_sys_call fname args env compile_expr
+    @ [IComment (Printf.sprintf "end Sys (%s)" fname)]
+  | App (fname, args) -> 
+    [IComment (Printf.sprintf "App: %s" fname)]
+    @ compile_fof_call fname args env compile_expr
+    @ [IComment (Printf.sprintf "end App (%s)" fname)]
+  | Tuple exprs -> 
+    [IComment "Tuple: constructor"]
+    @ compile_tuple exprs env compile_expr
+    @ [IComment "end Tuple"]
+  | Get (tup, index) -> 
+    [IComment "Get: tuple element access"]
+    @ compile_get tup index env compile_expr
+    @ [IComment "end Get"]
+  | Set (tup, index, value) -> 
+    [IComment "Set: tuple element mutation"]
+    @ compile_set tup index value env compile_expr
+    @ [IComment "end Set"]
+  | Length tup -> 
+    [IComment "Length: tuple"]
+    @ compile_expr tup env @ type_checking (Reg ret_reg) TupleT
+    @ [ ISub ((Reg ret_reg), tuple_tag) ;
+      IMov ((Reg ret_reg), RegOffset (RAX, 0)) ;
+      IComment "end Length"]
+  | Void -> [IComment "(void)" ; INop]
 
 
 (* Counts the max number of expressions mantained in stack at the same time *)
