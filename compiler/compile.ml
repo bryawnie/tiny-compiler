@@ -380,7 +380,7 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
   let check_index_t = type_checking (Reg ret_reg) IntT in
   let check_tuple_t = type_checking (Reg ret_reg) TupleT in 
   comp_val @ [IMov (loc_val, (Reg ret_reg))] @
-  comp_ind @ check_index_t @ [IAdd ((Reg ret_reg), Const 2L); IMov (loc_idx, (Reg ret_reg))] @ 
+  comp_ind @ check_index_t @ [ IMov (loc_idx, (Reg ret_reg))] @ 
   comp_tup @ check_tuple_t @
   [
     ISub ((Reg ret_reg), tuple_tag);
@@ -388,6 +388,7 @@ let compile_set (tup: expr) (index: expr) (value: expr) (env: env)
   ]
   @ check_index (Reg aux_reg) @
   [
+    IAdd ((Reg aux_reg), Const 2L);
     ISar ((Reg aux_reg), Const 1L) ; 
     IMul ((Reg aux_reg), Const 8L);     (* Index * 8 *)
     IAdd ((Reg ret_reg), (Reg aux_reg));      (* RAX + 8*(i+1) *)
