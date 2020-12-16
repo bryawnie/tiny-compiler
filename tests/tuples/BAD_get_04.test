@@ -1,0 +1,7 @@
+NAME: Negative Index
+DESCRIPTION: Tuple definition
+STATUS: RT error
+SRC:
+(get (tup 1 2 3) -1)
+EXPECTED:
+Unexpected negative index -1
