@@ -231,6 +231,7 @@ let rec pass_args (num_args: int) (regs: arg list) (env: env): instruction list 
       else []
 
 
+(* compiles a system function call*)
 let compile_sys_call (fname: string) (args: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list = 
   let params, type_return = sys_lookup fname env in
@@ -257,6 +258,17 @@ let compile_sys_call (fname: string) (args: expr list) (env: env)
 (* -----------------------------------
   |       FIRST ORDER FUNCTIONS      |                
   ------------------------------------*)
+(* compiles arguments for a function call *)
+let rec compile_args (args:expr list) (env: env) 
+  (compiler: expr->env->instruction list) : instruction list =
+  match args with
+    | hd::tl ->
+      let new_env, arg_loc = extend_env (tmp_gensym ()) env in
+      compiler hd env @ [IMov (arg_loc, Reg ret_reg)] 
+      @ compile_args tl new_env compiler
+    | [] -> []
+
+(* compiles a first order function call *)
 let compile_fof_call  (fname: string) (args: expr list) (env: env)
   (compilexpr: expr -> env -> instruction list) : instruction list =  
   let flbl, arity = fun_lookup fname env in
@@ -265,15 +277,15 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
     then Fmt.failwith 
       "Arity mismatch: function %s expects %d arguments but got %d" fname arity argc
     else
-      let compiled_args = List.map (fun expr -> compilexpr expr env) args in
-      let saved_args    = save_args compiled_args env in
+      let compiled_args = compile_args args env compilexpr in
       let pushed_regs   = List.rev (push_regs arity arg_regs) in
       let passed_args   = pass_args arity arg_regs env in
       let restore_rsp   = if arity > 6 
         then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
         else [] in
       let popped_regs   = pop_regs arity arg_regs in
-      saved_args @ pushed_regs @ passed_args @ [ICall flbl] @ restore_rsp @ popped_regs    
+      compiled_args @ pushed_regs @ passed_args @ [ICall flbl] @ restore_rsp @ popped_regs    
+
 
 (* -----------------------------------
   |              TUPLES              |                
