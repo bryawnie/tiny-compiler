@@ -210,6 +210,9 @@ let encode (t: dtype): instruction list =
   | ClosureT -> [IAdd (Reg ret_reg, function_tag)]
   | AnyT    -> []
 
+(* THIS IS WRONG! This must be done inside compile_args. To evaluate the 
+  n-th argument it is necessary to know the location of the previous n-1 args
+  (i.e. have them in the environment) to avoid overwriting them. *)
 let rec save_args ?(types= []) (comp_exprs: instruction list list) (env: env): instruction list =
   let new_env, loc_arg = extend_env (tmp_gensym ()) env in
   match comp_exprs, types with
@@ -223,11 +226,13 @@ let rec pass_args (num_args: int) (regs: arg list) (env: env): instruction list 
   match regs with
     | [] -> 
       if num_args > 0 then 
-        pass_args (num_args - 1) [] new_env @ [IMov (Reg aux_reg, loc_arg); IPush (Reg aux_reg)] 
+        pass_args (num_args - 1) [] new_env 
+        @ [IMov (Reg aux_reg, loc_arg); IPush (Reg aux_reg)]
       else []
     | x::xs -> 
       if num_args > 0 then 
-        pass_args (num_args - 1) xs new_env @ [IMov (Reg aux_reg, loc_arg); IMov (x, Reg aux_reg)] 
+        pass_args (num_args - 1) xs new_env 
+        @ [IMov (Reg aux_reg, loc_arg); IMov (x, Reg aux_reg)] 
       else []
 
 
@@ -260,39 +265,46 @@ let compile_sys_call (fname: string) (args: expr list) (env: env)
   ------------------------------------*)
 let check_arity (arity: arg) (args: int) : instruction list =
   [ (* Negative Index Error *)
-    IComment "Begin Check: Function Arity";
+    IComment "Function arity check";
     IMov ((Reg err_code_reg), arity_mismatch_error) ; 
     IMov ((Reg type_code_reg), arity) ;
     ICmp ((Reg type_code_reg), Const (encode_int (Int64.of_int args)));     
     IJne  (Label "error_arity_handler");
-    IComment "End Check: Function Arity";
+    IComment "end Function arity check";
   ]
-  
+
+(* compiles arguments for a function call *)
+let rec compile_args (args: expr list) (env: env) 
+  (compiler: expr -> env -> instruction list) : instruction list =
+  match args with
+  | [] -> []
+  | hd::tl -> 
+    let new_env, loc = extend_env (tmp_gensym ()) env in
+    compiler hd env
+    @ IMov (loc, Reg ret_reg)::compile_args tl new_env compiler
+
 
 let compile_fof_call  (fname: string) (args: expr list) (env: env)
-  (compilexpr: expr -> env -> instruction list) : instruction list =  
-  let loc = let_lookup fname env in
-  let arity = List.length args in
-  let compiled_args = List.map (fun expr -> compilexpr expr env) args in
-  let saved_args    = save_args compiled_args env in
-  let pushed_regs   = List.rev (push_regs arity arg_regs) in
-  let passed_args   = pass_args arity arg_regs env in
-  let restore_rsp   = if arity > 6 
-    then [IAdd (Reg RSP, Const (Int64.of_int (8 * (arity - 6))))]
+  (compiler: expr -> env -> instruction list) : instruction list =  
+  let closure = let_lookup fname env in
+  let argc = List.length args in
+  let eval_args = compile_args args env compiler in
+  let pushed_args = List.rev (push_regs argc arg_regs) in
+  let passed_args = pass_args argc arg_regs env in
+  let restore_rsp   = if argc > 6 
+    then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in
-  let popped_regs   = pop_regs arity arg_regs in
-  type_checking loc ClosureT @
-  saved_args @
-  [
-    IMov (Reg ret_reg, loc);                        (* The Closure *)
+  let restore_regs   = pop_regs argc arg_regs in
+  type_checking closure ClosureT @ eval_args
+  @ [IMov (Reg ret_reg, closure);                   (* The Closure *)
     ISub (Reg ret_reg, function_tag);               (* Untag *)
-    IMov (Reg aux_reg, RegOffset (ret_reg, 0))      (* Arity *)
-  ] 
-  @ check_arity (Reg aux_reg) (List.length args) @ pushed_regs @ passed_args @
-  [
-    IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
-    ICall (Reg ret_reg)
-  ] @ restore_rsp @ popped_regs    
+    IMov (Reg aux_reg, RegOffset (ret_reg, 0))]     (* Arity *) 
+  @ check_arity (Reg aux_reg) (List.length args) 
+  @ pushed_args 
+  @ passed_args 
+  @ [IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
+    ICall (Reg ret_reg)] 
+  @ restore_rsp @ restore_regs    
 
 (* -----------------------------------
   |              TUPLES              |                
@@ -438,7 +450,7 @@ let rec compile_let_exprs (compilexpr: expr -> env -> instruction list)
     (compiled_expr @ compiled_tail, final_env)
   
 
-(* -----------------------------------
+(*------------------------------------
   |                MAIN              |                
   ------------------------------------*)
 
@@ -574,8 +586,8 @@ let callee_epilogue = [
 ]
 
 (* Compiles definitions for first order functions *)
-let compile_fundef (fname: string) (params: string list) (body: expr) (env: env): 
-  instruction list =
+let compile_fundef (fname: string) (params: string list) (body: expr) 
+  (env: env): instruction list =
   let _, senv = env in
   let flbl = fname in
   let lenv = let_env_from_params params empty_env in
@@ -591,7 +603,7 @@ let compile_fundef (fname: string) (params: string list) (body: expr) (env: env)
   @ [IRet; IEmpty; ILabel ("end_function_"^flbl)]
 
 
-(* RECORD COMPILER BEGIN
+(* RECORD COMPILER START
 
 (* compiles the constructor function for a record *)
 let compile_rec_constructor (id: string) (id_code: int64) (arity: int) 
@@ -701,16 +713,24 @@ instruction list * instruction list =
     let funs, exts = compile_declarations tail env in
     compile_declaration dec env funs exts
 
-(* default system functions *)
-let default_sys_env : sys_env =
-  ["print", ([AnyT], AnyT) ;
-  "raw_print", ([AnyT], AnyT)]
+(* Compiles a function closure *)
+let compile_closure (label: string) (arity: int64) (free_vars: int64 list)=
+  let size = 2 + List.length free_vars in
+  let rec store_free_vars (vars: int64 list) =
+    match vars with 
+    | [] -> [] 
+    | hd::tl -> 
+      store_free_vars tl @
+      [IMov (RegOffset (heap_reg, 1 + List.length vars), Const hd)]
+  in
+  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))  (* arity *)
+  ; IMov (RegOffset (heap_reg, 1), Label label)]              (* label *)
+  @ store_free_vars free_vars @                               (* free vals *)
+  [ IMov (Reg ret_reg, Reg heap_reg)
+  ; IAdd (Reg ret_reg, function_tag)
+  ; IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]
 
-let exists_in_env (fname: string) (env: env): bool =
-  let fenv, _ = env in 
-  List.mem_assoc fname fenv 
-
-let rec add_funs_env (ds: decl list) (env: let_env) : instruction list * let_env =
+let rec add_closures_to_env (ds: decl list) (env: let_env) : instruction list * let_env =
   match ds with
   | [] -> [], env
   | d::tail ->
@@ -721,27 +741,36 @@ let rec add_funs_env (ds: decl list) (env: let_env) : instruction list * let_env
       else
         let new_env, loc = extend_let_env fname env in
         let arity = (Int64.of_int (List.length params)) in
-        let instrs, updated_env = add_funs_env tail new_env in
-        [
-          IComment ("Introducing Function "^fname^" to Stack");
-          IMov (RegOffset (heap_reg, 0), Const (encode_int arity)); (* Arity *)
-          IMov (RegOffset (heap_reg, 1), Label fname);              (* Label *)
-          IMov (RegOffset (heap_reg, 2), Const 0L);                 (* Free-Vars *)
-          IMov (Reg RAX, Reg heap_reg);
-          IAdd (Reg RAX, function_tag);
-          IAdd (Reg heap_reg, Const 32L);
-          IMov (loc, Reg RAX);
-          IComment "Done";
-          IEmpty;
-        ] @instrs, updated_env
-    | _ -> add_funs_env tail env
+        let instrs, updated_env =  in
+        [IComment (fname^"Closure")]
+        @ compile_closure fname arity [] @
+        [ IMov (loc, Reg RAX)
+        ; IComment "end Closure"
+        ; IEmpty ]
+        @ instrs, updated_env
+    | _ -> add_closures_to_env tail env
+
+let rec let_env_from_decls (decls: decl list) (env: let_env) : let_env =
+  match decls with
+  | [] -> []
+  | hd::tl ->
+    match hd with
+    | FunDef (fname, _, _) -> 
+      let new_env, _ = extend_let_env fname env in
+      let_env_from_decls tl new_env
+    | _ -> let_env_from_decls tl env
+
+(* default system functions *)
+let default_sys_env : sys_env =
+  ["print", ([AnyT], AnyT) ;
+  "raw_print", ([AnyT], AnyT)]
 
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
-      let fun_to_stack, fenv  = add_funs_env decs empty_env in
-      (* let fenv = fun_env_from_decls decs empty_fun_env in *)
+      let closures, fenv  = add_closures_to_env decs empty_env in
+      let fenv = let_env_from_decls decs [] in
       let senv = sys_env_from_decls decs default_sys_env in
       let env  = fenv, senv in
       let functions, externs = compile_declarations decs env in
