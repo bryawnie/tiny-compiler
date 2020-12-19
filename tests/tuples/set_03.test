@@ -1,0 +1,6 @@
+NAME: Nested Operation Set
+DESCRIPTION: Tuple definition
+SRC:
+(set (tup 1 2 (* 5 8) 3 4 5) 1 (tup 1 (* 3 4)))
+EXPECTED:
+(tup 1 (tup 1 12) 40 3 4 5)

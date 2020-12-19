@@ -192,10 +192,10 @@ void error(int errCode, val v) {
     fprintf(stderr, "Expected tuple, but got %s\n", str);
     break;
   case ERR_NEG_INDEX:
-    fprintf(stderr, "Unexpected negative index %ld\n", (int_value - 2) >> 1);
+    fprintf(stderr, "Unexpected negative index %ld\n", int_value  >> 1);
     break;
   case ERR_INDEX_OVERFLOW:
-    fprintf(stderr, "Index out of bounds %ld\n", (int_value - 2) >> 1);
+    fprintf(stderr, "Index out of bounds %ld\n", (int_value >> 1) );
     break;
   case ERR_NOT_RECORD:
     fprintf(stderr, "Expected record, but got %s\n", str);
