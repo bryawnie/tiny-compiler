@@ -142,6 +142,18 @@ let pp_dtype fmt =
   | ClosureT -> pf fmt "function"
   | AnyT -> pf fmt  "any"
 
+(* 
+  ----- Type to String -----
+  Used for assembly comments
+*)
+let str_type (t: dtype): string =
+  match t with
+  | IntT    -> "Integer"
+  | BoolT   -> "Boolean"
+  | TupleT  -> "Tuple"
+  | RecordT -> "Record"
+  | ClosureT -> "Function"
+  | AnyT    -> "Any"
 
 let pp_decl fmt =
   function

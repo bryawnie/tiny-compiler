@@ -3,86 +3,13 @@ open Asm
 open Env
 open Encode
 open Gensym
+open Utils
+open Errors
 
-(** Register usage conventions **)
-(*  
-  RAX = return value | first argument to a instruction
-  R11 = second argument to a instruction
-  RBX = Error code register
-  RCX = Error var register 
-*)
-let ret_reg = RAX
-(* Closure currently being executed is always in R10, which is a caller-save
-register.*)
-let closure_reg = R10
-let aux_reg = R11
-let err_code_reg = RBX
-let type_code_reg = RCX
-let heap_reg = R15
-let arg_regs = [
-  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
-]
-
-(* INTEGER ERROR CODES *)
-let not_a_number = Const 1L
-let not_a_boolean = Const 2L 
-let not_a_tuple = Const 3L
-let neg_index = Const 4L
-let index_overflow = Const 5L
-let not_a_record = Const 6L
-let record_type_error = Const 7L
-let arity_mismatch_error = Const 8L
-let not_a_closure = Const 9L
-
-
-(* other constants *)
-let rax_error_handler = "error_type_handler"
-let rcx_error_handler = "error_index_handler"
-
-let str_type (t: dtype): string =
-  match t with
-  | IntT    -> "Integer"
-  | BoolT   -> "Boolean"
-  | TupleT  -> "Tuple"
-  | RecordT -> "Record"
-  | ClosureT -> "Function"
-  | AnyT    -> "Any"
-
-(* This function handles the request for a type checking *)
-let type_checking (register: arg) (expected_type: dtype): instruction list =
-  let tag_check error_code type_tag =
-    [IMov ((Reg err_code_reg), error_code) ; IMov ((Reg type_code_reg), register) ;
-    IAnd ((Reg type_code_reg), tag_bitmask) ; ICmp ((Reg type_code_reg), type_tag) ;
-    IJnz (Label "error_type_handler")]
-  in
-  let beg_comm = [IComment (Fmt.str "Begin Type Checking %s" @@ str_type expected_type)] in
-  let end_comm = [IComment (Fmt.str "End Type Checking %s" @@ str_type expected_type) ] in
-  beg_comm @
-  begin match expected_type with
-  | IntT -> [
-    ITest (register, Const 1L) ; 
-    IMov ((Reg err_code_reg), not_a_number) ;
-    IJnz (Label "error_type_handler");
-  ]
-  | BoolT -> tag_check not_a_boolean bool_tag
-  | TupleT -> tag_check not_a_tuple tuple_tag
-  | RecordT -> tag_check not_a_record record_tag
-  | ClosureT -> tag_check not_a_closure function_tag
-  | AnyT -> [] (* AnyT == no typecheck *)
-  end
-  @ end_comm
-  
-let rec take (k:int) (l: 'a list) : 'a list =
-  if k > 0 then
-  begin match l with
-  | [] -> []
-  | x :: xs -> x::take (k-1) xs
-  end else []
 
 (* Returns the instruction list to backup the necesary registers before a function call *)
 let push_regs (n: int) (regs: arg list): instruction list =
   List.map (fun r -> IPush r) (take n regs)
-
 
 (* Returns the instruction list to restore the necesary registers after a function call *)
 let pop_regs (n: int) (regs: arg list): instruction list =
@@ -224,6 +151,11 @@ let rec save_args ?(types= []) (comp_exprs: instruction list list) (env: env): i
   | compiled::tail, t::ts -> compiled @ type_checking (Reg ret_reg) t @ decode t @
     [IMov (loc_arg, Reg ret_reg)] @ save_args tail new_env ~types:ts
 
+(* 
+  PASS ARGS - FUNCTION CALL
+  Passes args from stack to calling convention register
+  (or pushing into stack)
+*)
 let rec pass_args (num_args: int) (regs: arg list) (env: env): instruction list =
   let new_env, loc_arg = extend_env (tmp_gensym ()) env in
   match regs with
@@ -266,15 +198,6 @@ let compile_sys_call (fname: string) (args: expr list) (env: env)
 (* -----------------------------------
   |       FIRST ORDER FUNCTIONS      |                
   ------------------------------------*)
-let check_arity (arity: arg) (args: int) : instruction list =
-  [ (* Negative Index Error *)
-    IComment "Function arity check";
-    IMov ((Reg err_code_reg), arity_mismatch_error) ; 
-    IMov ((Reg type_code_reg), arity) ;
-    ICmp ((Reg type_code_reg), Const (encode_int (Int64.of_int args)));     
-    IJne  (Label "error_arity_handler");
-    IComment "end Function arity check";
-  ]
 
 (* compiles arguments for a function call *)
 let rec compile_args (args: expr list) (env: env) 
@@ -286,7 +209,10 @@ let rec compile_args (args: expr list) (env: env)
     compiler hd env
     @ IMov (loc, Reg ret_reg)::compile_args tl new_env compiler
 
-
+(* 
+  Compiles the call of a First Order Function
+  Uses the closure generated.
+*)
 let compile_fof_call  (fname: string) (args: expr list) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list =  
   let closure = let_lookup fname env in
@@ -360,22 +286,6 @@ let compile_tuple (elems: expr list) (env: env)
 (* -----------------------------------
   |               GET                |
   ------------------------------------*)
-(* Checks positive index and avoid overflows *)
-let check_index (index: arg) : instruction list =
-  [ (* Negative Index Error *)
-    IComment "Begin Check: Positive Index for Tuples";
-    IMov ((Reg err_code_reg), neg_index) ; 
-    IMov ((Reg type_code_reg), index) ;
-    ICmp (index, Const 0L);     
-    IJl  (Label "error_index_handler");
-    IComment "End Check: Positive Index for Tuples";
-  ] @ [ (* Index out of bounds *)
-    IComment "Begin Check: Index out of Bounds";
-    IMov ((Reg err_code_reg), index_overflow) ; 
-    ICmp (index, RegOffset (RAX, 0)); 
-    IJg (Label "error_index_handler");
-    IComment "End Check: Index out of Bounds";
-  ]
 
 (* Compiles get expressions *)
 let compile_get (tup: expr) (index: expr) (env: env) 
@@ -549,10 +459,13 @@ let varcount_prog (p: prog): int =
   Gets the necesary space to save local vars 
   Uses a sound overaproximate.
 *)
+
+(* This function is applied to the main program *)
 let stack_offset_for_prog (p: prog): int =
   let vars = varcount_prog p in
   if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
 
+(* This function is applied for function calling *)
 let stack_offset_for_local (exp: expr): int =
   let vars = varcount exp in
   if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
@@ -623,97 +536,6 @@ let compile_fundef (fname: string) (params: string list) (body: expr)
   @ compile_expr body (lenv, senv) @ callee_epilogue 
   @ [IRet; IEmpty; ILabel ("end_function_"^flbl)]
 
-
-(* RECORD COMPILER START
-
-(* compiles the constructor function for a record *)
-let compile_rec_constructor (id: string) (id_code: int64) (arity: int) 
-  (env: env) : instruction list =
-  let flbl, _ = fun_lookup id env in
-  let heap_size = Const (Int64.of_int (8 + arity * 8)) in
-  let rec move_args n =
-    if n <= 0 then []
-    else if n > 6 then 
-      IMov(RegOffset(heap_reg, n), RegOffset(RBP, -2 -(n-6)))::(move_args @@ n-1)
-    else (IMov(RegOffset(heap_reg, n), List.nth arg_regs (n-1)))
-      ::(move_args @@ n-1)
-  in
-  [IEmpty; ILabel flbl ;(* constructor name *)
-  (* rsp does not move because this function does not use the stack.
-  rbp is not backed up because it is not modified. *)
-  IMov ((Reg ret_reg), Const id_code); (* rax <- id_code *)
-  IMov (RegOffset(heap_reg, 0), (Reg ret_reg))] (* write id_code to heap *) 
-  @ move_args arity               (* write values to heap *)
-  @ [IMov ((Reg ret_reg), Reg heap_reg) ; (* get pointer value *)
-  IAdd ((Reg ret_reg), record_tag) ;    (* tag value *)
-  IAdd (Reg heap_reg, heap_size) ;(* bump heap *)
-  IRet]                           (* return *)
-
-(* compiles the get function for a record field *)
-let compile_rec_get (rec_id: string) (id_code: int64) 
-  (field_id: string) (field_pos: int) (env:env) =
-  let flbl, _ =
-    let fun_name = String.concat "-" [rec_id ; field_id] in
-    fun_lookup fun_name env
-  in
-  [ILabel flbl ;                      (* function label *)
-  IMov ((Reg ret_reg), Reg RDI)]            (* rax <- val *)
-  @ type_checking (Reg ret_reg) RecordT @   (* type check rax *)
-  [ISub (Reg RDI, record_tag) ;             (* untag value to obtain pointer *)
-  IMov ((Reg aux_reg), Const id_code) ;     (* r11 <- id_code *)
-  IMov (Reg err_code_reg, record_type_error) ; (* r <- error_code *)
-  ICmp (RegOffset(RDI, 0), (Reg aux_reg)) ; (* ID CHECK! *)
-  IJne rax_error_handler;             (* if != then error_handler *)
-  IMov (Reg RAX, RegOffset(RDI, field_pos)) ; (* rax <- [rax + 8 * i]*)
-  IRet] (* return *)
-
-let rec compile_getters (rec_id: string) (rec_code: int64) 
-  (fields: string list) (pos: int) (env: env) =
-  match fields with
-  | [] -> []
-  | field_id::tail ->
-    (compile_rec_get rec_id rec_code field_id pos env)
-    @ (compile_getters rec_id rec_code tail (pos+1) env)
-
-(* Compiles a record type checker. Type checkers have the name of the form
-"[record_id]?" and return true if the passed argument is of type record_id *)
-let compile_rec_typechecker (rec_id: string) (id_code: int64) (env: env)
-  : instruction list =
-  let label, _ = 
-    let fname = String.concat "" [rec_id ; "?"] in
-    fun_lookup fname env
-  in
-  let return_label = String.concat "_" [label ; "return"] in
-  [ILabel label ;
-  IMov ((Reg ret_reg), Const false_encoding) ;  (* rax <- false *)
-  IMov ((Reg aux_reg), Reg RDI) ;               (* r11 <- val *)
-  IAnd ((Reg aux_reg), tag_bitmask) ;           (* get type tag *)
-  ICmp ((Reg aux_reg), record_tag) ;            (* compare to record type tag *)
-  IJne return_label ;                     (* if != return false *)
-  IMov ((Reg aux_reg), Const id_code) ;         (* r11 <- id_code *)
-  ISub (Reg RDI, record_tag) ;            (* untag to obtain pointer *)
-  ICmp (RegOffset(RDI, 0), (Reg aux_reg)) ;     (* check record type *)
-  IJne return_label ;                     (* if != return false *)
-  IMov ((Reg ret_reg), Const true_encoding) ;   (* rax <- false*)
-  ILabel return_label ;
-  IRet]
-
-(* Compiles constructors and getters for a record type *)
-let compile_recdef (id: string) (fields: string list) (env: env) : instruction list =
-  (* This tag allows for record type checking at runtime.
-    tag = (record_counter() << 32) | length(fields) *)
-  let rec_id_code = Int64.add
-    (Int64.shift_left (Int64.of_int @@ record_counter ()) 32)
-    (Int64.of_int @@ List.length fields)
-  in 
-  let constructor = 
-    compile_rec_constructor id rec_id_code (List.length fields) env
-  in
-  let getters = compile_getters id rec_id_code fields 1 env in
-  let type_checker = compile_rec_typechecker id rec_id_code env in
-  constructor @ getters @ type_checker
-
-RECORD COMPILER END *)
 
 (* Compiles a declaration for a function. Returns a instr list for compiled
 functions and another for foreign function "extern"s *)

@@ -137,3 +137,23 @@ let pp_instr : instruction Fmt.t =
 (* A pretty printing for instruction list *)
 let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr
+
+
+(** Register usage conventions **)
+(*  
+  RAX = return value | first argument to a instruction
+  R11 = second argument to a instruction
+  RBX = Error code register
+  RCX = Error var register 
+*)
+let ret_reg = RAX
+(* Closure currently being executed is always in R10, which is a caller-save
+register.*)
+let closure_reg = R10
+let aux_reg = R11
+let err_code_reg = RBX
+let type_code_reg = RCX
+let heap_reg = R15
+let arg_regs = [
+  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+]
