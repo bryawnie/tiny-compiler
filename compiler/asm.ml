@@ -12,7 +12,7 @@ type reg =
 | RBP   (* Base Pointer   |   E *)
 | R8    (* 5th Param      |   R *)
 | R9    (* 6th Param      |   R *)
-| R10   (*                |   R *)
+| R10   (* Closure        |   R *)
 | R11   (* Temp Register  |   R *)
 | R15   (* HEAP Register  |   E *)
 (* R = caller-save ; E = callee-save *)

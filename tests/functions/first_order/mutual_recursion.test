@@ -1,5 +1,5 @@
 NAME: mutual recursion
-DESCRIPTION: mutually rescursive function definition
+DESCRIPTION: mutually recursive function definition
 SRC:
 (def (pin n)
     (if (= n 0)
