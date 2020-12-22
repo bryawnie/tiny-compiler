@@ -12,6 +12,9 @@ open Gensym
   RCX = Error var register 
 *)
 let ret_reg = RAX
+(* Closure currently being executed is always in R10, which is a caller-save
+register.*)
+let closure_reg = R10
 let aux_reg = R11
 let err_code_reg = RBX
 let type_code_reg = RCX
@@ -585,6 +588,24 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+(* Compiles a function closure *)
+let compile_closure (label: string) (arity: int64) (free_vars: int64 list)=
+  let size = 3 + List.length free_vars in
+  let rec store_free_vars (vars: int64 list) =
+    match vars with 
+    | [] -> [] 
+    | hd::tl -> 
+      store_free_vars tl @
+      [IMov (RegOffset (heap_reg, 2 + List.length vars), Const hd)]
+  in
+  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))(* arity *)
+  ; IMov (RegOffset (heap_reg, 1), Label label)   (* code pointer *)
+  ; IMov (RegOffset (heap_reg, 2), Const arity)]  (* free var count*)
+  @ store_free_vars free_vars @ (* free variable values *)
+  [ IMov (Reg ret_reg, Reg heap_reg)  (* obtain closure pointer *)
+  ; IAdd (Reg ret_reg, function_tag)  (* tag pointer *)
+  ; IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]  (* update heap ptr *)
+
 (* Compiles definitions for first order functions *)
 let compile_fundef (fname: string) (params: string list) (body: expr) 
   (env: env): instruction list =
@@ -713,23 +734,6 @@ instruction list * instruction list =
     let funs, exts = compile_declarations tail env in
     compile_declaration dec env funs exts
 
-(* Compiles a function closure *)
-let compile_closure (label: string) (arity: int64) (free_vars: int64 list)=
-  let size = 2 + List.length free_vars in
-  let rec store_free_vars (vars: int64 list) =
-    match vars with 
-    | [] -> [] 
-    | hd::tl -> 
-      store_free_vars tl @
-      [IMov (RegOffset (heap_reg, 1 + List.length vars), Const hd)]
-  in
-  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))  (* arity *)
-  ; IMov (RegOffset (heap_reg, 1), Label label)]              (* label *)
-  @ store_free_vars free_vars @                               (* free vals *)
-  [ IMov (Reg ret_reg, Reg heap_reg)
-  ; IAdd (Reg ret_reg, function_tag)
-  ; IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]
-
 let rec add_closures_to_env (ds: decl list) (env: let_env) : instruction list * let_env =
   match ds with
   | [] -> [], env
@@ -741,7 +745,7 @@ let rec add_closures_to_env (ds: decl list) (env: let_env) : instruction list * 
       else
         let new_env, loc = extend_let_env fname env in
         let arity = (Int64.of_int (List.length params)) in
-        let instrs, updated_env =  in
+        let instrs, updated_env = add_closures_to_env tail new_env in
         [IComment (fname^"Closure")]
         @ compile_closure fname arity [] @
         [ IMov (loc, Reg RAX)
@@ -770,7 +774,6 @@ let compile_prog : prog Fmt.t =
   fun fmt p ->
     match p with Program (decs, exp) ->
       let closures, fenv  = add_closures_to_env decs empty_env in
-      let fenv = let_env_from_decls decs [] in
       let senv = sys_env_from_decls decs default_sys_env in
       let env  = fenv, senv in
       let functions, externs = compile_declarations decs env in
@@ -801,7 +804,7 @@ our_code_starts_here:
 %a" 
       pp_instrs externs pp_instrs callee_prologue 
       pp_instrs (
-      [ISub (Reg RSP, Const stack_offset)] @ functions @ fun_to_stack 
+      [ISub (Reg RSP, Const stack_offset)] @ functions @ closures
       @ instrs @ callee_epilogue @ [IRet]
       @ error_type_handler @ error_index_handler @ error_arity_handler) 
 

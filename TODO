@@ -1,0 +1,21 @@
+Fix recursive function calls
+- make a free identifier counting function of type expr -> string list
+- get free ids in a function body
+- look for these id's in environment. If present, put their values in 
+the closure, if not, raise unbound identifier error.
+- for named (def'd) functions closure position is known at compile time 
+and can thus be included within the env for recursion.
+
+def declarations should be mostly equivalent to a series of
+let-bound lambdas.
+
+(def (f x) x)
+(def (f y) y)
+
+translates to
+
+(let (f (lambda (x) x))
+    let (y (lambda (x) x))
+        ...)
+
+However, def'd functions can be recursive while let-bound lambdas can not.
