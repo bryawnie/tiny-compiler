@@ -193,7 +193,6 @@ let rec let_env_from_params (params: string list) (env: let_env) : let_env =
     let new_env, _ = extend_arg_env name env in
     let_env_from_params tail new_env
 
-
 (* construct a fun_env from function declarations *)
 (* let rec fun_env_from_decls (ds: decl list) (fenv: fun_env) : fun_env =
   match ds with

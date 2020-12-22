@@ -45,7 +45,7 @@ type expr =
   | BinOp of binOp * expr * expr
   | Let of (string * expr) list * expr
   | If  of expr * expr * expr
-  | App of string * expr list (* first order function application *)
+  | App of string * expr list (* first class function application *)
   | Sys of string * expr list (* foreign function application *)
   | Tuple of expr list        (* Components of the tuple *)
   | Get of expr * expr        (* Tuple, desired index *)
@@ -66,6 +66,7 @@ type dtype =
   | BoolT
   | TupleT
   | RecordT
+  | ClosureT
   | AnyT
 
 type decl =
@@ -138,6 +139,7 @@ let pp_dtype fmt =
   | BoolT -> pf fmt "bool"
   | TupleT -> pf fmt "tuple"
   | RecordT -> pf fmt "record"
+  | ClosureT -> pf fmt "function"
   | AnyT -> pf fmt  "any"
 
 
