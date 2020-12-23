@@ -214,12 +214,15 @@ let rec compile_args (args: expr list) (env: env)
   Uses the closure generated.
 *)
 let compile_fof_call  (fname: string) (args: expr list) (env: env)
-  (compiler: expr -> env -> instruction list) : instruction list =  
+  (compiler: expr -> env -> instruction list) : instruction list = 
+  let modified_arg_regs = [
+   Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+  ] in
   let closure = let_lookup fname env in
-  let argc = List.length args in
+  let argc = 1 + List.length args in (* NEW *)
   let eval_args = compile_args args env compiler in
   let pushed_args = List.rev (push_regs argc arg_regs) in
-  let passed_args = pass_args argc arg_regs env in
+  let passed_args = pass_args argc modified_arg_regs env in
   let restore_rsp   = if argc > 6 
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in
@@ -230,6 +233,7 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
     IMov (Reg aux_reg, RegOffset (ret_reg, 0))]     (* Arity *) 
   @ check_arity (Reg aux_reg) (List.length args) 
   @ pushed_args 
+  @ [IMov (Reg RDI, closure)] (* NEW *)
   @ passed_args 
   @ [IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
     ICall (Reg ret_reg)] 
@@ -502,18 +506,19 @@ let callee_epilogue = [
 ]
 
 (* Compiles a function closure *)
-let compile_closure (label: string) (arity: int64) (free_vars: int64 list)=
+let compile_closure (label: string) (arity: int64) (free_vars: string list) (env: let_env) =
   let size = 3 + List.length free_vars in
-  let rec store_free_vars (vars: int64 list) =
+  let num_fv = Int64.of_int (List.length free_vars) in 
+  let rec store_free_vars (vars: string list) =
     match vars with 
     | [] -> [] 
-    | hd::tl -> 
-      store_free_vars tl @
-      [IMov (RegOffset (heap_reg, 2 + List.length vars), Const hd)]
+    | hd::tl ->
+      [IMov (RegOffset (heap_reg, 2 + (size - List.length tl)), let_lookup hd (env,[]))] @
+      store_free_vars tl
   in
   [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))(* arity *)
-  ; IMov (RegOffset (heap_reg, 1), Label label)   (* code pointer *)
-  ; IMov (RegOffset (heap_reg, 2), Const arity)]  (* free var count*)
+  ; IMov (RegOffset (heap_reg, 1), Label label)             (* code pointer *)
+  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]            (* free var count*)
   @ store_free_vars free_vars @ (* free variable values *)
   [ IMov (Reg ret_reg, Reg heap_reg)  (* obtain closure pointer *)
   ; IAdd (Reg ret_reg, function_tag)  (* tag pointer *)
@@ -524,7 +529,7 @@ let compile_fundef (fname: string) (params: string list) (body: expr)
   (env: env): instruction list =
   let _, senv = env in
   let flbl = fname in
-  let lenv = let_env_from_params params empty_env in
+  let lenv = let_env_from_params ([fname]@params) empty_env in
   let stack_offset = Int64.of_int (stack_offset_for_local body) in
   [IJmp (Label ("end_function_"^flbl)) ;IEmpty;
    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
@@ -556,12 +561,37 @@ instruction list * instruction list =
     let funs, exts = compile_declarations tail env in
     compile_declaration dec env funs exts
 
+
+let rec free_vars (exp: expr) (saved: string list): string list =
+  match exp with
+  | Num _   ->  []
+  | Bool _  ->  []
+  | UnOp (_, e)  -> free_vars e saved
+  | Id x    ->  if List.mem x saved then [] else [x]
+  | Let (vals,b) -> free_vars b (saved @ (List.map (fun (x,_) -> x) vals))
+  | BinOp (_, l, r) -> free_vars l saved @ free_vars r saved
+  | If (c, t, f) -> free_vars c saved @ free_vars t saved @ free_vars f saved
+  | Sys (_, args) -> List.concat_map (fun x -> free_vars x saved) args
+  | App (fname, args) -> free_vars (Id fname) saved @ List.concat_map (fun x -> free_vars x saved) args
+  | Tuple exprs -> List.concat_map (fun x -> free_vars x saved) exprs
+  | Get (tup, index) -> free_vars tup saved @ free_vars index saved
+  | Set (tup, index, value) -> free_vars tup saved @ free_vars index saved @ free_vars value saved
+  | Length tup -> free_vars tup saved
+  | Void -> []
+
+(*
+  ADD CLOSURES TO ENV - FUNCTIONS
+  Since the function is allocated in heap, its reference
+  can be stored in stack to be called without problems :)
+*)
 let rec add_closures_to_env (ds: decl list) (env: let_env) : instruction list * let_env =
   match ds with
   | [] -> [], env
   | d::tail ->
     match d with
-    | FunDef (fname, params, _) ->
+    | FunDef (fname, params, body) ->
+      let fv_raw = remove_repeated @@ free_vars body [] in
+      let fv = List.filter (fun x -> not (List.mem x @@ params@[fname])) fv_raw in
       if (List.mem_assoc fname env) then 
         (Fmt.failwith "Duplicate function name: %s" fname)
       else
@@ -569,12 +599,13 @@ let rec add_closures_to_env (ds: decl list) (env: let_env) : instruction list * 
         let arity = (Int64.of_int (List.length params)) in
         let instrs, updated_env = add_closures_to_env tail new_env in
         [IComment (fname^"Closure")]
-        @ compile_closure fname arity [] @
+        @ compile_closure fname arity fv new_env @
         [ IMov (loc, Reg RAX)
         ; IComment "end Closure"
         ; IEmpty ]
         @ instrs, updated_env
     | _ -> add_closures_to_env tail env
+
 
 let rec let_env_from_decls (decls: decl list) (env: let_env) : let_env =
   match decls with
