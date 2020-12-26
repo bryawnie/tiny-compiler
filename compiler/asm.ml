@@ -14,6 +14,9 @@ type reg =
 | R9    (* 6th Param      |   R *)
 | R10   (* Closure        |   R *)
 | R11   (* Temp Register  |   R *)
+| R12   (* Error Code Reg |   R *)
+| R13   (* Error Arg Reg  |   R *)
+| R14   
 | R15   (* HEAP Register  |   E *)
 (* R = caller-save ; E = callee-save *)
 
@@ -78,6 +81,9 @@ let pp_reg : reg Fmt.t =
     | R9  -> Fmt.string fmt "R9"
     | R10 -> Fmt.string fmt "R10"
     | R11 -> Fmt.string fmt "R11"
+    | R12 -> Fmt.string fmt "R12"
+    | R13 -> Fmt.string fmt "R13"
+    | R14 -> Fmt.string fmt "R14"    
     | R15 -> Fmt.string fmt "R15"
 
 
@@ -148,11 +154,11 @@ let pp_instrs : (instruction list) Fmt.t =
 *)
 let ret_reg = RAX
 (* Closure currently being executed is always in R10, which is a caller-save
-register.*)
-let closure_reg = R10
+register. NOT IMPLEMENTED (yet) *)
+(* let closure_reg = R10 *)
 let aux_reg = R11
-let err_code_reg = RBX
-let type_code_reg = RCX
+let err_code_reg = R12
+let type_code_reg = R13
 let heap_reg = R15
 let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9

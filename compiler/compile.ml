@@ -46,6 +46,7 @@ let rec varcount (e:expr): int =
   | Length tuple -> varcount tuple
   | Void -> 0
 
+(* This varcount also considers defined functions (1st order) *)
 let rec varcount_funs (ds: decl list): int =
   match ds with 
   | [] -> 0
@@ -54,6 +55,7 @@ let rec varcount_funs (ds: decl list): int =
     | FunDef (_, _, _) -> 4 + varcount_funs ds
     | _ -> varcount_funs ds
 
+(* Varcount for an entire program *)
 let varcount_prog (p: prog): int =
   let Program (decs, exp) = p in
   varcount exp + varcount_funs decs
@@ -109,16 +111,19 @@ let compile_closure (label: string) (arity: int64) (free_vars: string list) (env
         IMov (RegOffset (heap_reg, 3 + (List.length free_vars - List.length vars)), Reg aux_reg)] @
       store_free_vars tl
   in
-  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))(* arity *)
-  ; IMov (RegOffset (heap_reg, 1), Label label)             (* code pointer *)
-  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]            (* free var count*)
-  @ store_free_vars free_vars @ (* free variable values *)
-  [ IMov (Reg ret_reg, Reg heap_reg)  (* obtain closure pointer *)
-  ; IAdd (Reg ret_reg, function_tag)] (* tag pointer *)
+  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))    (* arity *)
+  ; IMov (RegOffset (heap_reg, 1), Label label)                 (* code pointer *)
+  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]               (* free var count*)
+  @ store_free_vars free_vars @                     (* free variable values *)
+  [ IMov (Reg ret_reg, Reg heap_reg)                (* obtain closure pointer *)
+  ; IAdd (Reg ret_reg, function_tag)]               (* tag pointer *)
   @ if (size mod 2 = 0) then
-    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]  (* update heap ptr *)
+    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]         (* update heap ptr *)
   else 
     [IAdd (Reg heap_reg, Const (Int64.of_int ((size + 1) * 8)))]  (* update heap ptr *)
+
+
+
 
 (* -----------------------------------
   |                UNOPS             |                
@@ -226,23 +231,6 @@ let compile_if (compile: expr -> env -> instruction list) (t: expr) (f: expr) (e
 (* -----------------------------------
   |        FOREIGN FUNCTIONS (C)      |                
   ------------------------------------*)
-let decode (t: dtype): instruction list =
-  match t with
-  | IntT    -> [ISar (Reg ret_reg, Const 1L)]
-  | BoolT   -> [IShr (Reg ret_reg, Const 63L)]
-  | TupleT  -> [ISub (Reg ret_reg, tuple_tag)]
-  | RecordT -> [ISub (Reg ret_reg, record_tag)]
-  | ClosureT -> [ISub (Reg ret_reg, function_tag)]
-  | AnyT    -> []
-
-let encode (t: dtype): instruction list =
-  match t with
-  | IntT    -> [ISal (Reg ret_reg, Const 1L)]
-  | BoolT   -> [IShl (Reg ret_reg, Const 63L); IAdd (Reg ret_reg, Const 1L)]
-  | TupleT  -> [IAdd (Reg ret_reg, tuple_tag)]
-  | RecordT -> [IAdd (Reg ret_reg, record_tag)]
-  | ClosureT -> [IAdd (Reg ret_reg, function_tag)]
-  | AnyT    -> []
 
 (* THIS IS WRONG! This must be done inside compile_args. To evaluate the 
   n-th argument it is necessary to know the location of the previous n-1 args

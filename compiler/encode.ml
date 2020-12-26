@@ -1,4 +1,5 @@
 open Asm
+open Ast
 
 (* constants *)
 let true_encoding = 0x8000000000000001L
@@ -26,3 +27,21 @@ let tuple_tag = Const 3L (* 011 - tuple pointer *)
 let record_tag = Const 5L (* 101 - record pointer *) 
 let function_tag = Const 7L (* 111 - function pointer*)
 let tag_bitmask = Const 7L (*111*)
+
+let decode (t: dtype): instruction list =
+  match t with
+  | IntT    -> [ISar (Reg ret_reg, Const 1L)]
+  | BoolT   -> [IShr (Reg ret_reg, Const 63L)]
+  | TupleT  -> [ISub (Reg ret_reg, tuple_tag)]
+  | RecordT -> [ISub (Reg ret_reg, record_tag)]
+  | ClosureT -> [ISub (Reg ret_reg, function_tag)]
+  | AnyT    -> []
+
+let encode (t: dtype): instruction list =
+  match t with
+  | IntT    -> [ISal (Reg ret_reg, Const 1L)]
+  | BoolT   -> [IShl (Reg ret_reg, Const 63L); IAdd (Reg ret_reg, Const 1L)]
+  | TupleT  -> [IAdd (Reg ret_reg, tuple_tag)]
+  | RecordT -> [IAdd (Reg ret_reg, record_tag)]
+  | ClosureT -> [IAdd (Reg ret_reg, function_tag)]
+  | AnyT    -> []
