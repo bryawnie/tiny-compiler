@@ -115,12 +115,7 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
   | Num n -> NumV n
   | Bool p -> BoolV p
   | Id x -> let_lookup x env
-  | App (fname, args) -> 
-    let val_args = List.map (fun exp -> (interp ~env:env exp)) args in 
-    let params, body = fun_lookup fname env in
-    let _, fenv = env in 
-    let new_env = multi_extend_lenv params val_args (mt_lenv, fenv) in
-    interp ~env:new_env body
+  | App (_, _) -> Fmt.failwith "Error: Not implemented"
   | UnOp (op, e) ->
       begin match op with
       | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)

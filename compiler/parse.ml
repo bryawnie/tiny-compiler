@@ -122,7 +122,7 @@ let rec parse_expr (sexp : sexp) : expr =
       then Fmt.failwith "Not a valid function: %s" fname else
     begin match Int64.of_string_opt fname with
       | Some _ -> Fmt.failwith "Not a valid function: %s" fname
-      | None -> App (fname, List.map parse_expr args) (* FIX *)
+      | None -> App (Id fname, List.map parse_expr args) (* FIX *)
     end 
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
 

@@ -213,27 +213,31 @@ let rec compile_args (args: expr list) (env: env)
   Compiles the call of a First Order Function
   Uses the closure generated.
 *)
-let compile_fof_call  (fname: string) (args: expr list) (env: env)
+let compile_fof_call  (funexpr: expr) (args: expr list) (env: env)
   (compiler: expr -> env -> instruction list) : instruction list = 
   let modified_arg_regs = [
    Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
   ] in
-  let closure = let_lookup fname env in
+  (* let closure = let_lookup fname env in *)
   let argc = 1 + List.length args in (* NEW *)
-  let eval_args = compile_args args env compiler in
+  let compiled_clos = compiler funexpr env in
+  let label = gensym "fun_clos" in
+  let new_env, slot_clos = extend_env label env in
+  let eval_args   = compile_args args new_env compiler in
   let pushed_args = List.rev (push_regs argc arg_regs) in
-  let passed_args = pass_args (argc - 1) modified_arg_regs env in
-  let restore_rsp   = if argc > 6 
+  let passed_args = pass_args (argc - 1) modified_arg_regs new_env in
+  let restore_rsp = if argc > 6 
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in
   let restore_regs   = pop_regs argc arg_regs in
-  type_checking closure ClosureT @ eval_args
-  @ [IMov (Reg ret_reg, closure);                   (* The Closure *)
+  compiled_clos @ [ IComment "Saving the closure"; IMov (slot_clos, Reg ret_reg)] @
+  type_checking (Reg ret_reg) ClosureT @ eval_args
+  @ [IMov (Reg ret_reg, slot_clos);                   (* The Closure *)
     ISub (Reg ret_reg, function_tag);               (* Untag *)
     IMov (Reg aux_reg, RegOffset (ret_reg, 0))]     (* Arity *) 
   @ check_arity (Reg aux_reg) (List.length args) 
   @ pushed_args 
-  @ [IMov (Reg RDI, closure)] (* NEW *)
+  @ [IMov (Reg RDI, slot_clos)] (* NEW *)
   @ passed_args 
   @ [IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
     ICall (Reg ret_reg)] 
@@ -405,9 +409,9 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     @ compile_sys_call fname args env compile_expr
     @ [IComment (Printf.sprintf "end Sys (%s)" fname)]
   | App (fname, args) -> 
-    [IComment (Printf.sprintf "App: %s" fname)]
+    [IComment (Printf.sprintf "App")]
     @ compile_fof_call fname args env compile_expr
-    @ [IComment (Printf.sprintf "end App (%s)" fname)]
+    @ [IComment (Printf.sprintf "end App")]
   | Tuple exprs -> 
     [IComment "Tuple: constructor"]
     @ compile_tuple exprs env compile_expr
@@ -572,7 +576,7 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   | BinOp (_, l, r) -> free_vars l saved @ free_vars r saved
   | If (c, t, f) -> free_vars c saved @ free_vars t saved @ free_vars f saved
   | Sys (_, args) -> List.concat_map (fun x -> free_vars x saved) args
-  | App (fname, args) -> free_vars (Id fname) saved @ List.concat_map (fun x -> free_vars x saved) args
+  | App (fexp, args) -> free_vars fexp saved @ List.concat_map (fun x -> free_vars x saved) args
   | Tuple exprs -> List.concat_map (fun x -> free_vars x saved) exprs
   | Get (tup, index) -> free_vars tup saved @ free_vars index saved
   | Set (tup, index, value) -> free_vars tup saved @ free_vars index saved @ free_vars value saved
