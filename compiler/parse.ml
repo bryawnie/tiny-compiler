@@ -107,6 +107,14 @@ let rec parse_expr (sexp : sexp) : expr =
     Let ((parse_defs parse_expr) defs, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
+  | `List [`Atom "λ" ; `List ids; body] -> 
+    let rec toStrAtoms (sexps: t list): string list =
+       match sexps with 
+       | [] -> []
+       | `Atom x::tl -> [x] @ toStrAtoms tl
+       | _ -> Fmt.failwith "Bad Arguments in function definition" 
+    in
+    Fun (toStrAtoms ids, parse_expr body)
   | `List [`Atom "get" ; t; i] -> 
     Get (parse_expr t, parse_expr i)
   | `List [`Atom "set" ; t; i; v] -> 

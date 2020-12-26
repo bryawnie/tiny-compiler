@@ -116,6 +116,7 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
   | Bool p -> BoolV p
   | Id x -> let_lookup x env
   | App (_, _) -> Fmt.failwith "Error: Not implemented"
+  | Fun (_, _) -> Fmt.failwith "Error: Not implemented"
   | UnOp (op, e) ->
       begin match op with
       | Add1 -> liftNumV (Int64.add) (interp ~env:env e) (NumV 1L)

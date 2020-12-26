@@ -126,12 +126,12 @@ let get_let_slot (env: let_env) : memloc =
   
   Arguments ALWAYS precede let-bound values in the environment.
   *)
-  let get_arg_slot (env: let_env) : memloc =
-    let arg_regs = [MReg RDI; MReg RSI; MReg RDX; MReg RCX; MReg R8; MReg R9] in
-    let n = List.length env in
-    if n < 6 
-      then List.nth arg_regs (n) 
-      else StackOffset (4 - n) (*  arg_n = RBP + 8 * ((n - 6) + 2)  *)
+let get_arg_slot (env: let_env) : memloc =
+  let arg_regs = [MReg RDI; MReg RSI; MReg RDX; MReg RCX; MReg R8; MReg R9] in
+  let n = List.length env in
+  if n < 6 
+    then List.nth arg_regs (n) 
+    else StackOffset (4 - n) (*  arg_n = RBP + 8 * ((n - 6) + 2)  *)
 
 
 (*-----------------------

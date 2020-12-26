@@ -15,6 +15,110 @@ let push_regs (n: int) (regs: arg list): instruction list =
 let pop_regs (n: int) (regs: arg list): instruction list =
   List.map (fun r -> IPop r) (take n regs)
 
+(* Callee - Save  @ Init *)
+let callee_prologue = [
+  IPush (Reg RBP);
+  IMov (Reg RBP, Reg RSP);
+]
+
+(* Callee - Save  @ End *)
+let callee_epilogue = [
+  IMov (Reg RSP, Reg RBP);
+  IPop (Reg RBP)
+]
+
+(* Counts the max number of expressions mantained in stack at the same time *)
+let rec varcount (e:expr): int =
+  match e with
+  | Num _ -> 0
+  | Bool _ -> 0
+  | Id _ -> 0
+  | UnOp (_, sub_ex) -> varcount sub_ex
+  | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
+  | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
+  | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
+  | Fun (_, _) -> 2
+  | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex + 2
+  | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex
+  | Tuple exprs -> List.fold_left max 0 (List.map varcount exprs) + List.length exprs
+  | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
+  | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
+  | Length tuple -> varcount tuple
+  | Void -> 0
+
+let rec varcount_funs (ds: decl list): int =
+  match ds with 
+  | [] -> 0
+  | d::ds ->
+    match d with
+    | FunDef (_, _, _) -> 4 + varcount_funs ds
+    | _ -> varcount_funs ds
+
+let varcount_prog (p: prog): int =
+  let Program (decs, exp) = p in
+  varcount exp + varcount_funs decs
+
+(* 
+  Gets the necesary space to save local vars 
+  Uses a sound overaproximate.
+*)
+
+(* This function is applied to the main program *)
+let stack_offset_for_prog (p: prog): int =
+  let vars = varcount_prog p in
+  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
+
+(* This function is applied for function calling *)
+let stack_offset_for_local (exp: expr): int =
+  let vars = varcount exp in
+  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
+
+(*
+  FREE VARS - FUNCTION CALLS
+  Counts the number of free vars in the body of a function
+  Used to create closures.
+*)
+let rec free_vars (exp: expr) (saved: string list): string list =
+  match exp with
+  | Num _   ->  []
+  | Bool _  ->  []
+  | UnOp (_, e)  -> free_vars e saved
+  | Id x    ->  if List.mem x saved then [] else [x]
+  | Let (vals,b) -> free_vars b (saved @ (List.map (fun (x,_) -> x) vals))
+  | BinOp (_, l, r) -> free_vars l saved @ free_vars r saved
+  | If (c, t, f) -> free_vars c saved @ free_vars t saved @ free_vars f saved
+  | Fun (ids, body) -> free_vars body (saved @ ids)
+  | Sys (_, args) -> List.concat_map (fun x -> free_vars x saved) args
+  | App (fexp, args) -> free_vars fexp saved @ List.concat_map (fun x -> free_vars x saved) args
+  | Tuple exprs -> List.concat_map (fun x -> free_vars x saved) exprs
+  | Get (tup, index) -> free_vars tup saved @ free_vars index saved
+  | Set (tup, index, value) -> free_vars tup saved @ free_vars index saved @ free_vars value saved
+  | Length tup -> free_vars tup saved
+  | Void -> []
+
+
+(* Compiles a function closure *)
+let compile_closure (label: string) (arity: int64) (free_vars: string list) (env: let_env) =
+  let size = 3 + List.length free_vars in
+  let num_fv = Int64.of_int (List.length free_vars) in 
+  let rec store_free_vars (vars: string list) =
+    match vars with 
+    | [] -> [] 
+    | hd::tl ->
+      [ IMov (Reg aux_reg, let_lookup hd (env,[]));
+        IMov (RegOffset (heap_reg, 3 + (List.length free_vars - List.length vars)), Reg aux_reg)] @
+      store_free_vars tl
+  in
+  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))(* arity *)
+  ; IMov (RegOffset (heap_reg, 1), Label label)             (* code pointer *)
+  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]            (* free var count*)
+  @ store_free_vars free_vars @ (* free variable values *)
+  [ IMov (Reg ret_reg, Reg heap_reg)  (* obtain closure pointer *)
+  ; IAdd (Reg ret_reg, function_tag)] (* tag pointer *)
+  @ if (size mod 2 = 0) then
+    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]  (* update heap ptr *)
+  else 
+    [IAdd (Reg heap_reg, Const (Int64.of_int ((size + 1) * 8)))]  (* update heap ptr *)
 
 (* -----------------------------------
   |                UNOPS             |                
@@ -389,9 +493,53 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     compile_unop (compile_expr e env) op
     @ [IComment "end unOp"]
   | Id x    ->  
-    [ IComment "Id: identifier lookup";
+    [ IComment ("Id: identifier lookup "^ x);
     IMov (Reg ret_reg, let_lookup x env) ;
     IComment "end Id"]
+  | Fun (ids, body) ->
+    (* CLOSURE CREATION *)
+    let arity = (Int64.of_int (List.length ids))      in  (* Arity of function *)
+    let label = (gensym "lambda")                     in  (* Label of function *)
+    let free  = remove_repeated @@ free_vars body ids in  (* Free Ids *)
+    let (lenv, senv) = env                            in  (* Split lenv and senv *)
+    let closure_definition =
+      [IComment (label^" Closure")] 
+      @ compile_closure label arity free lenv @
+      [IComment "end Closure" ; IEmpty ]   
+    (* Now the closure is in RAX *)
+    in
+    (* BODY COMPILATION *)
+    let new_lenv = let_env_from_params (["self"]@ids) empty_env in    (* Adding params definitions *)
+    let rec add_freevars_stack (fv: string list) (env: env): instruction list * env =
+      let nro_arg = List.length free - List.length fv in
+      match fv with
+      | [] -> [], env
+      | id::ids -> 
+        let new_env, slot = extend_env id env in
+        let instrs, ret_env = add_freevars_stack ids new_env in
+        ([IMov (Reg aux_reg, RegOffset (RDI, 3 + nro_arg));
+          IMov (slot, Reg aux_reg)] 
+        @ instrs, ret_env)
+    in
+    let add_fv, fun_env   = add_freevars_stack free (new_lenv, senv) in
+    let stack_offset = Int64.of_int (stack_offset_for_local body) in  (* Stack Offset needed *)
+    [
+      IJmp (Label ("end_of_"^label));
+      IEmpty;
+      IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+      IComment ("==> LAMBDA: "^label);
+      IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+      ILabel label
+    ] 
+    @ callee_prologue 
+    @ [ISub (Reg RSP, Const stack_offset)]
+    @ [ISub (Reg RDI, function_tag)]
+    @ add_fv
+    @ [IAdd (Reg RDI, function_tag)]
+    @ compile_expr body fun_env
+    @ callee_epilogue 
+    @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
+    @ closure_definition
   | Let (vals,b) -> 
       let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
       IComment "let-binding"::compiled_vals @ (compile_expr b new_env)
@@ -433,51 +581,6 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
   | Void -> [IComment "(void)" ; INop]
 
 
-(* Counts the max number of expressions mantained in stack at the same time *)
-let rec varcount (e:expr): int =
-  match e with
-  | Num _ -> 0
-  | Bool _ -> 0
-  | Id _ -> 0
-  | UnOp (_, sub_ex) -> varcount sub_ex
-  | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
-  | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
-  | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
-  | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex
-  | Sys (_, args_ex)-> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex
-  | Tuple exprs -> List.fold_left max 0 (List.map varcount exprs) + List.length exprs
-  | Get (tuple, index) -> 1 + max (varcount tuple) (varcount index)
-  | Set (tuple, index, value) -> 2 + max (max (varcount tuple) (varcount index)) (varcount value)
-  | Length tuple -> varcount tuple
-  | Void -> 0
-
-let rec varcount_funs (ds: decl list): int =
-  match ds with 
-  | [] -> 0
-  | d::ds ->
-    match d with
-    | FunDef (_, _, _) -> 4 + varcount_funs ds
-    | _ -> varcount_funs ds
-
-let varcount_prog (p: prog): int =
-  let Program (decs, exp) = p in
-  varcount exp + varcount_funs decs
-
-(* 
-  Gets the necesary space to save local vars 
-  Uses a sound overaproximate.
-*)
-
-(* This function is applied to the main program *)
-let stack_offset_for_prog (p: prog): int =
-  let vars = varcount_prog p in
-  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
-
-(* This function is applied for function calling *)
-let stack_offset_for_local (exp: expr): int =
-  let vars = varcount exp in
-  if vars mod 2 = 0 then vars * 8 else (vars * 8 + 8)
-
 (* Label for handling errors *)
 let error_type_handler =
  [ILabel "error_type_handler";
@@ -497,36 +600,6 @@ let error_arity_handler =
     IMov (Reg RDI, (Reg err_code_reg));
     ICall (Label "error")]
 
-(* Callee - Save  @ Init *)
-let callee_prologue = [
-  IPush (Reg RBP);
-  IMov (Reg RBP, Reg RSP);
-]
-
-(* Callee - Save  @ End *)
-let callee_epilogue = [
-  IMov (Reg RSP, Reg RBP);
-  IPop (Reg RBP)
-]
-
-(* Compiles a function closure *)
-let compile_closure (label: string) (arity: int64) (free_vars: string list) (env: let_env) =
-  let size = 3 + List.length free_vars in
-  let num_fv = Int64.of_int (List.length free_vars) in 
-  let rec store_free_vars (vars: string list) =
-    match vars with 
-    | [] -> [] 
-    | hd::tl ->
-      [IMov (RegOffset (heap_reg, 2 + (size - List.length tl)), let_lookup hd (env,[]))] @
-      store_free_vars tl
-  in
-  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))(* arity *)
-  ; IMov (RegOffset (heap_reg, 1), Label label)             (* code pointer *)
-  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]            (* free var count*)
-  @ store_free_vars free_vars @ (* free variable values *)
-  [ IMov (Reg ret_reg, Reg heap_reg)  (* obtain closure pointer *)
-  ; IAdd (Reg ret_reg, function_tag)  (* tag pointer *)
-  ; IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]  (* update heap ptr *)
 
 (* Compiles definitions for first order functions *)
 let compile_fundef (fname: string) (params: string list) (body: expr) 
@@ -565,23 +638,6 @@ instruction list * instruction list =
     let funs, exts = compile_declarations tail env in
     compile_declaration dec env funs exts
 
-
-let rec free_vars (exp: expr) (saved: string list): string list =
-  match exp with
-  | Num _   ->  []
-  | Bool _  ->  []
-  | UnOp (_, e)  -> free_vars e saved
-  | Id x    ->  if List.mem x saved then [] else [x]
-  | Let (vals,b) -> free_vars b (saved @ (List.map (fun (x,_) -> x) vals))
-  | BinOp (_, l, r) -> free_vars l saved @ free_vars r saved
-  | If (c, t, f) -> free_vars c saved @ free_vars t saved @ free_vars f saved
-  | Sys (_, args) -> List.concat_map (fun x -> free_vars x saved) args
-  | App (fexp, args) -> free_vars fexp saved @ List.concat_map (fun x -> free_vars x saved) args
-  | Tuple exprs -> List.concat_map (fun x -> free_vars x saved) exprs
-  | Get (tup, index) -> free_vars tup saved @ free_vars index saved
-  | Set (tup, index, value) -> free_vars tup saved @ free_vars index saved @ free_vars value saved
-  | Length tup -> free_vars tup saved
-  | Void -> []
 
 (*
   ADD CLOSURES TO ENV - FUNCTIONS

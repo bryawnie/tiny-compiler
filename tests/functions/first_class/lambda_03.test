@@ -1,0 +1,7 @@
+NAME: lambda with multiple free vars
+SRC:
+(let ((n 5) (m 6) (k 7))
+    (let (random_fun (λ (x) (- k (+ x (* n m)))))
+        (random_fun 3)))
+
+EXPECTED: -26

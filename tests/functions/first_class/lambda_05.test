@@ -1,0 +1,19 @@
+NAME: Enunciado Lambdas test
+SRC:
+
+(def (fib n) 
+    (if (= n 0) 
+        0
+        (if (= n 1)
+            1
+            (+ (fib (- n 1)) (fib (- n 2))))))
+
+(def (pair_fun f g p) 
+    (tup (f (get p 1)) 
+         (g (get p 2))))
+
+(pair_fun (λ (x) (+ 3 x))
+          (λ (y) (pair_fun fib (λ (z) (* z y)) (tup y y)))
+          (tup 39 2))
+
+EXPECTED: 

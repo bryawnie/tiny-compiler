@@ -1,0 +1,9 @@
+NAME: Currified functions
+SRC:
+(let (addn (λ (n) 
+            (λ (x) (+ x n))))
+    (let (add5 (addn 5))
+        (let (add3 (addn 3))
+            (+ (add3 2) (add5 5)))))
+
+EXPECTED: 15
