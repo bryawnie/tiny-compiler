@@ -311,22 +311,22 @@ let compile_fof_call  (funexpr: expr) (args: expr list) (env: env)
    Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
   ] in
   (* let closure = let_lookup fname env in *)
-  let argc = 1 + List.length args in (* NEW *)
-  let compiled_clos = compiler funexpr env in
-  let label = gensym "fun_clos" in
+  let argc = 1 + List.length args in                  (* Also considering self reference *)
+  let compiled_clos = compiler funexpr env in         (* The Body *)
+  let label = gensym "fun_clos" in    
   let new_env, slot_clos = extend_env label env in
-  let eval_args   = compile_args args new_env compiler in
-  let pushed_args = List.rev (push_regs argc arg_regs) in
-  let passed_args = pass_args (argc - 1) modified_arg_regs new_env in
+  let eval_args   = compile_args args new_env compiler in             (* Function Args *)
+  let pushed_args = List.rev (push_regs argc arg_regs) in             (* Push of required registers*)
+  let passed_args = pass_args (argc - 1) modified_arg_regs new_env in (* Passing args (not self ref) *)
   let restore_rsp = if argc > 6 
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in
-  let restore_regs   = pop_regs argc arg_regs in
-  compiled_clos @ [ IComment "Saving the closure"; IMov (slot_clos, Reg ret_reg)] @
-  type_checking (Reg ret_reg) ClosureT @ eval_args
+  let restore_regs   = pop_regs argc arg_regs in                      (* Pop calling registers *)
+  compiled_clos @ [ IComment "Saving the closure"; IMov (slot_clos, Reg ret_reg)] @ (* Passing the closure *)
+  type_checking (Reg ret_reg) ClosureT @ eval_args    (* Typechecking *)
   @ [IMov (Reg ret_reg, slot_clos);                   (* The Closure *)
-    ISub (Reg ret_reg, function_tag);               (* Untag *)
-    IMov (Reg aux_reg, RegOffset (ret_reg, 0))]     (* Arity *) 
+    ISub (Reg ret_reg, function_tag);                 (* Untag *)
+    IMov (Reg aux_reg, RegOffset (ret_reg, 0))]       (* Arity *) 
   @ check_arity (Reg aux_reg) (List.length args) 
   @ pushed_args 
   @ [IMov (Reg RDI, slot_clos)] (* NEW *)
@@ -461,7 +461,66 @@ let rec compile_let_exprs (compilexpr: expr -> env -> instruction list)
     let compiled_expr, new_env = compile_let_expr compilexpr env id v in
     let compiled_tail, final_env = compile_let_exprs compilexpr new_env tail in
     (compiled_expr @ compiled_tail, final_env)
-  
+
+
+(* -----------------------------------
+  |             LAMBDAS               |
+  ------------------------------------*)
+(* Compiles Lambda expressions *)
+let compile_lambda (ids: string list) (body: expr) (env: env) 
+  (compile_expr: expr -> env -> instruction list) : instruction list = 
+  (* CLOSURE CREATION *)
+  let arity = (Int64.of_int (List.length ids))      in  (* Arity of function *)
+  let label = (gensym "lambda")                     in  (* Label of function *)
+  let free  = remove_repeated @@ free_vars body ids in  (* Free Ids *)
+  let (lenv, senv) = env                            in  (* Split lenv and senv *)
+  let closure_definition =
+    [IComment (label^" Closure")] 
+    @ compile_closure label arity free lenv @
+    [IComment "end Closure" ; IEmpty ]   
+  (* Now the closure is in RAX *)
+  in
+  (* BODY COMPILATION *)
+  let new_lenv = let_env_from_params (["self"]@ids) empty_env in    (* Adding params definitions *)
+  (* 
+    ADD FREE VARS TO STACK
+    Bounds to stack the references of free ids contained in
+    the closure, to bring access by the regular way.
+    Returns the instruction list and the environment with lodaded ids.
+  *)
+  let rec add_freevars_stack (fv: string list) (env: env): instruction list * env =
+    let nro_arg = List.length free - List.length fv in
+    match fv with
+    | [] -> [], env
+    | id::ids -> 
+      let new_env, slot = extend_env id env in
+      let instrs, ret_env = add_freevars_stack ids new_env in
+      ([IMov (Reg aux_reg, RegOffset (RDI, 3 + nro_arg));
+        IMov (slot, Reg aux_reg)] 
+      @ instrs, ret_env)
+  in
+  (* Adding free vars into stack *)
+  let add_fv, fun_env   = add_freevars_stack free (new_lenv, senv) in
+  let stack_offset = Int64.of_int (stack_offset_for_local body) in  (* Stack Offset needed *)
+  [
+    IJmp (Label ("end_of_"^label));
+    IEmpty;
+    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+    IComment ("==> LAMBDA: "^label);
+    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+    ILabel label
+  ] 
+  @ callee_prologue 
+  @ [ISub (Reg RSP, Const stack_offset)]  (* Offset for defining locals*)
+  @ [ISub (Reg RDI, function_tag)]        (* Untagging Closure*)
+  @ add_fv                                (* Free vars into stack *)
+  @ [IAdd (Reg RDI, function_tag)]        (* Tagging again *)
+  @ compile_expr body fun_env             (* Compiling Body *)
+  @ callee_epilogue 
+  @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
+  @ closure_definition
+
+
 
 (*------------------------------------
   |                MAIN              |                
@@ -484,50 +543,7 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
     [ IComment ("Id: identifier lookup "^ x);
     IMov (Reg ret_reg, let_lookup x env) ;
     IComment "end Id"]
-  | Fun (ids, body) ->
-    (* CLOSURE CREATION *)
-    let arity = (Int64.of_int (List.length ids))      in  (* Arity of function *)
-    let label = (gensym "lambda")                     in  (* Label of function *)
-    let free  = remove_repeated @@ free_vars body ids in  (* Free Ids *)
-    let (lenv, senv) = env                            in  (* Split lenv and senv *)
-    let closure_definition =
-      [IComment (label^" Closure")] 
-      @ compile_closure label arity free lenv @
-      [IComment "end Closure" ; IEmpty ]   
-    (* Now the closure is in RAX *)
-    in
-    (* BODY COMPILATION *)
-    let new_lenv = let_env_from_params (["self"]@ids) empty_env in    (* Adding params definitions *)
-    let rec add_freevars_stack (fv: string list) (env: env): instruction list * env =
-      let nro_arg = List.length free - List.length fv in
-      match fv with
-      | [] -> [], env
-      | id::ids -> 
-        let new_env, slot = extend_env id env in
-        let instrs, ret_env = add_freevars_stack ids new_env in
-        ([IMov (Reg aux_reg, RegOffset (RDI, 3 + nro_arg));
-          IMov (slot, Reg aux_reg)] 
-        @ instrs, ret_env)
-    in
-    let add_fv, fun_env   = add_freevars_stack free (new_lenv, senv) in
-    let stack_offset = Int64.of_int (stack_offset_for_local body) in  (* Stack Offset needed *)
-    [
-      IJmp (Label ("end_of_"^label));
-      IEmpty;
-      IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
-      IComment ("==> LAMBDA: "^label);
-      IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
-      ILabel label
-    ] 
-    @ callee_prologue 
-    @ [ISub (Reg RSP, Const stack_offset)]
-    @ [ISub (Reg RDI, function_tag)]
-    @ add_fv
-    @ [IAdd (Reg RDI, function_tag)]
-    @ compile_expr body fun_env
-    @ callee_epilogue 
-    @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
-    @ closure_definition
+  | Fun (ids, body) -> compile_lambda ids body env compile_expr    
   | Let (vals,b) -> 
       let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
       IComment "let-binding"::compiled_vals @ (compile_expr b new_env)
