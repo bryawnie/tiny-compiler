@@ -1,7 +1,7 @@
 NAME: functions as parameters (2 args)
 SRC:
 (def (add_it unop binop)
-    (binop (unop 0) (unop 0)))
+    (binop (unop 1) (unop 2)))
 
 (def (incr x)
     (+ x 1))
@@ -11,4 +11,4 @@ SRC:
 
 (add_it incr sum)
 
-EXPECTED: 2
+EXPECTED: 5

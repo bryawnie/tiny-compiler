@@ -222,7 +222,7 @@ let compile_fof_call  (fname: string) (args: expr list) (env: env)
   let argc = 1 + List.length args in (* NEW *)
   let eval_args = compile_args args env compiler in
   let pushed_args = List.rev (push_regs argc arg_regs) in
-  let passed_args = pass_args argc modified_arg_regs env in
+  let passed_args = pass_args (argc - 1) modified_arg_regs env in
   let restore_rsp   = if argc > 6 
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in

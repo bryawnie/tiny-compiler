@@ -1,0 +1,20 @@
+NAME: functions as parameters, compound (2 args)
+SRC:
+(def (sum add2 add3 add4 prod)
+    (prod (add1 (add2 (add3 2))) 2))
+
+(def (sum2 x)
+    (+ x 2))
+
+(def (sum3 x)
+    (+ x 3))
+
+(def (sum4 x)
+    (+ x 4))
+
+(def (prod x y)
+    (* x y))
+
+(sum sum2 sum3 sum4 prod)
+
+EXPECTED: 16

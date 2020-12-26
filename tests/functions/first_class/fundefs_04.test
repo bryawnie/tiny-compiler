@@ -1,0 +1,8 @@
+NAME: Unbound id in function
+STATUS: CT error
+SRC:
+(def (apply-f x)
+    (f x))
+(apply-f 1)
+EXPECTED:
+Unbound identifier: f
