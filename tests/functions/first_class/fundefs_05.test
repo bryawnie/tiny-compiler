@@ -1,0 +1,8 @@
+NAME: functions as parameters, enunciado test
+SRC:
+(def (mapPair f p) (tup (f (get p 0)) (f (get p 1))))
+
+(let (add3 (λ (x) (+ 3 x)))
+  (mapPair add3 (tup 39 2)))
+
+EXPECTED: (tup 42 5)
