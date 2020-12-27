@@ -108,6 +108,7 @@ La carpeta `tests` contiene tests variados para el compilador. En específico, p
 - `tests/functions/first_class`: Implementación de First Class
 
 Los tests requeridos:
+
 *a)* Disponible en `fundefs_05.test`
 ```
 (def (mapPair f p) (tup (f (get p 0)) (f (get p 1))))
