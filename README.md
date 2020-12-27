@@ -8,63 +8,51 @@ En esta entrega se añade una esperada *feature* para el lenguaje, **funciones d
 - [x] Funciones como valores de primera clase.
 - [x] Lambdas y clausuras.
 
-La caraccterística adicional
+La característica adicional
 - [ ] Recursión.
 
 No fue implementada (yet).
 
 ## Especificación
+### Funciones como Valores
+Se realiza un *upgrade* a las funciones de primer orden previamente implementadas por el lenguaje. En este nuevo escenario, estas pueden ser tratadas como valores, permitiendo su paso a través de llamada de funciones. Un ejemplo puede ser el siguiente:
+```
+(def (applyToFive it)
+  (it 5))
 
-### Tuplas
-Una tupla es un tipo de dato que consiste en una secuencia de `n` elementos. Una tupla se construye con la operación `(tup e1 ... en)`, donde `e1 ... en` son los elementos de esta. Para operar sobre ella se utiliza `(get n t)` para obtener el `n`-ésimo elemento de la tupla `t` y, análogamente, se utiliza `(set n t v)` para cambiar su valor a `v`. Al igual que las listas y arreglos en muchos lenguajes de programación, los índices comienzan desde 0.
+(def (incr x)
+  (+ x 1))
 
-### Record
-Los records son estructuras de datos similares a las `struct` de C. Cada tipo de record posee un identificador y cero o más campos con nombre, similares a los elementos de una tupla. Para declarar un nuevo tipo de record se utiliza una expresión de la forma `(record <id> <campo1> ... <campon>)`. Una vez definido un record se pueden utilizar las siguientes funciones:
--  Constructor `<id> : any ... any -> record`. Recibe tantos argumentos como campos tenga el tipo de record y retorna un record de tipo `<id>` con los valores proporcionados.
-- `<id>-<campoi> : record -> any`. Retorna el valor del campo `<campoi>` del record proporcionado. El record debe ser de tipo `<id>`. Se crea una de estas funciones por cada campo.
-- `<id>? : any -> bool`. Determina si el elemento pasado como argumento es un record del tipo `<id>`.
+(applyToFive incr)
+```
+Se observa cómo `applyToFive` recibe como argumento una función `it`, la cual es aplicada al valor 5. Es decir, ahora una función pasa a ser una `expr` como cualquier otra.
 
-### Let Upgrade
-Resultó conveniente hacer un *upgrade* a las expresiones `let`. En concreto, antes cada expresión sólo podía introducir un nuevo identificador en *scope*, y la sintaxis era:
+### Lambdas (λ)
+Se implementan funciones lambdas (o anónimas), las cuales pueden definirse dentro de una sentencia `let`. Estas funciones no poseen nombre alguno, y su existencia permite funciones de orden superior como `addn`, la cual recibe un argumento `n` y retorna una función que suma n a su propio argumento. Se presenta un ejemplo:
 ```
-(let (<id> <val>) <body_exp>)
-``` 
-ahora, un let ofrece la posibilidad de introducir un número indefinido de variables de una sola vez, pasando a tener una sintaxis:
+(let (addn (λ (n) 
+            (λ (x) (+ x n))))
+    (let (add5 (addn 5))
+        (add5 6)))
 ```
-(let ((<id_1> <va_1>) (<id_2> <val_2>) ... (<id_n> <val_n>)) <body_exp>)
+El programa anterior debería devolver 11, pues `add5` es una función que suma 5 a su argumento.
+
+Se observa a través del ejemplo que la sintaxis concreta para definir funciones anónimas es:
+```
+(λ (<ids> ...) <body>)
 ```
 
-Un ejemplo puede ser la introducción de tres variables `x`, `y`, `z`, con valores 3, 4 y 5:
-
-**Antes**: Estaba la necesidad de introducir cada variable en un `let` distinto.
+### Clausuras
+Al momento de definir funciones, en especial las lambdas, se hace necesario capturar el ambiente de definición para conservar *scope* léxico. Esto permite poder acceder a las ids definidas fuera de la función, las cuales podrían ser detectadas como identificadoes libres si no se resguardan adecuadamente. Por ejemplo:
 ```
-(let (x 3)
-  (let (y 4)
-    (let (z 5)
-      (+ (+ x y) z))))
+(let (n 5)
+    (let (addn (λ (x) (+ x n)))
+        (addn 3)))
 ```
-**Ahora**: Basta con una sóla instancia de `let`.
-```
-(let ((x 3) (y 4) (z 5))
-  (+ (+ x y) z))
-```
-_NOTA:_ A modo de simplificar la introducción de una sola variable, se mantiene retrocompatibilidad con la sintaxis previamente existente.
-
-### Pattern-matching
-
-Un _pattern-matching_ de tuplas, consiste en una expresión que permite descomponerlas en variables que contengan sus elementos. La sintaxis utilizada es:
-```
-(let ((tup <id_1> <id_2> ... <id_n>) t)
-          <body>)
-```
-donde t es una tupla previamente existente que contiene exactamente `n` valores. Un ejemplo puede ser:
-```
-(let ((tup a b c) (tup 1 3 5))
-          (+ a b))
-```
-cuyo resultado debiese ser 4.
+El programa anterior debería entregar como resultado 8. Sin embargo, si el acceso a `n` dentro de la función se pierde, generaría un error. Por tanto, es necesario encapsular esto en clausuras. En particular, las funciones definidas con `def`, no requieren guardar ninguna variable libre ya que al momento de su definición, aun no se introduce ninguna variable en *scope*. Sin embargo, se opta por representarlas mediante clausuras igualmente, para mayor armonía entre funciones.
 
 ## Implementación
+
 ### Tuplas
 La natureleza compuesta y el largo variable de este tipo de dato significan que no cabe en un registro del procesador. Por tanto, para implementarlo es necesario que el programa pueda hacer uso del *heap*. Así, un valor de tipo `Tuple` es en realidad un puntero a un espacio en el *heap*, y es ahí donde se encuentran los valores de la tupla. Para poder saber el largo de esta estructura, los valores siempre están precedidos en el heap por un entero que contiene esa información.
 
