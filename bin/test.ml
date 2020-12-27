@@ -93,6 +93,11 @@ let parse_tests =
     check decl "Same declaration"
       (FunDef ("f", ["x" ; "y"], BinOp (Add, Id "x", Id "y")))
       (parse_decl @@ sexp_from_string "(def (f x y) (+ x y))") ;
+    check decl "Correct declaration"
+      (FunDef ("g", ["w" ; "x" ; "y" ; "z"],
+        BinOp (Add, BinOp (Add, Id "w", Id "x"), BinOp (Add, Id "y", Id "z")) ))
+      (parse_decl @@
+        sexp_from_string "(def (g w x y z) (+ (+ w x) (+ y z)))") ;
     check_raises "Should fail"
       (Failure "Not a valid parameter name: (x y)")
       (fun () -> ignore @@

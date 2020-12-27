@@ -99,7 +99,17 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   | Void -> []
 
 
-(* Compiles a function closure *)
+(* 
+  Compiles a function closure.
+
+  Closure structure:
+    [+0] arity
+    [+8] code pointer
+    [+16] free id count
+    [+24] free id 0
+    ...
+    [+(16 + 8*k)] free id k
+ *)
 let compile_closure (label: string) (arity: int64) (free_vars: string list) (env: let_env) =
   let size = 3 + List.length free_vars in
   let num_fv = Int64.of_int (List.length free_vars) in 
@@ -622,6 +632,8 @@ let compile_fundef (fname: string) (params: string list) (body: expr)
   @ compile_expr body (lenv, senv) @ callee_epilogue 
   @ [IRet; IEmpty; ILabel ("end_function_"^flbl)]
 
+(* Compiles constructor, getter, setter and type-checker for a record *)
+(* let compile_recdef (id: string) (fields: string list) (env: env) = *)
 
 (* Compiles a declaration for a function. Returns a instr list for compiled
 functions and another for foreign function "extern"s *)

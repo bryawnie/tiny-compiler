@@ -1,0 +1,9 @@
+NAME: scope test
+
+SRC:
+(def (sum3 x y z)
+  (+ (+ a b) (+ c d)))
+(sum3 1 2 3)
+
+EXPECTED:
+Unbound identifier: a
