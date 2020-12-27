@@ -3,19 +3,15 @@ __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
 
-# Entrega 3
-Esta entrega contempla algunas mejoras a la versión `v0.2`, donde se proteje el proceso de llamado de funciones (impidiendo un solapamiento de llamadas), y se realiza una refactorización de código con fines de mejorar su comprensión. 
+# Entrega 4
+En esta entrega se añade una esperada *feature* para el lenguaje, **funciones de primera clase**. Recordamos que en las versiones previas, solo se contaba con funciones de primer orden, las cuales son bastante limitadas, dado que deben definirse de forma aparte, y además no podían ser tratadas como valores. En esta nueva versión, se añade soporte a las siguientes *specs básicas* esperadas:
+- [x] Funciones como valores de primera clase.
+- [x] Lambdas y clausuras.
 
-Respecto a las nuevas *features* del lenguaje, los requerimientos básicos para esta entrega son:
-- [x] Tuplas.
-- [x] `get` en tuplas.
-- [x] Mutación de tuplas (`set`).
+La caraccterística adicional
+- [ ] Recursión.
 
-Mientras que los requerimientos extra:
-- [x] Records.
-- [x] Pattern-matching de tuplas.
-
-Todas ellos fueron implementados.
+No fue implementada (yet).
 
 ## Especificación
 
