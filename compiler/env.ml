@@ -224,3 +224,11 @@ let rec sys_env_from_decls (ds: decl list) (senv: sys_env) : sys_env =
     | SysFunDef (fname, params, return) -> sys_env_from_decls tail 
       (extend_sys_env fname params return senv)
     | _ -> sys_env_from_decls tail senv
+
+let rec multi_extend_env (bindings: string list) (env: env) : env * arg list =
+  match bindings with
+  | [] -> env, []
+  | hd::tl ->
+    let new_env, loc = extend_env hd env in
+    let return_env, loc_list = multi_extend_env tl new_env in
+    return_env, loc::loc_list

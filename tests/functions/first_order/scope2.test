@@ -1,5 +1,5 @@
 NAME: scope test
-
+STATUS: CT error
 SRC:
 (def (sum3 x y z)
   (+ (+ a b) (+ c d)))
