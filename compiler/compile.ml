@@ -52,7 +52,8 @@ let rec varcount_funs (ds: decl list): int =
   | [] -> 0
   | d::ds ->
     match d with
-    | FunDef (_, _, _) -> 4 + varcount_funs ds
+    | FunDef (_, _, _) -> 1 + varcount_funs ds
+    | RecDef (_, flds) -> 2 + List.length flds + varcount_funs ds
     | _ -> varcount_funs ds
 
 (* Varcount for an entire program *)
@@ -98,6 +99,41 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   | Length tup -> free_vars tup saved
   | Void -> []
 
+(*
+  Free ids
+  Another way to determine unbound identifiers in an expression.
+*)
+let rec free_ids (e: expr) (env: let_env) : string list =
+  let map elist =
+    List.concat_map (fun e -> free_ids e env) elist
+  in
+  match e with
+  | Num _ -> []
+  | Bool _ -> []
+  | Id id -> if List.mem_assoc id env then [] else [id]
+  | UnOp (_, x) -> free_ids x env
+  | BinOp (_, x, y) -> free_ids x env @ free_ids y env
+  | Let (bindings, e) ->
+    let (new_env, _), _ =
+      let ids, _ = List.split bindings in
+      multi_extend_env ids (env, empty_sys_env)
+    in
+    free_ids e new_env
+  | If (condition, then_expr, else_expr) -> 
+    free_ids condition env @
+    free_ids then_expr env @
+    free_ids else_expr env
+  | Fun (params, body) -> 
+    let (arg_lenv, _), _ = multi_extend_env params (env, empty_sys_env) in
+    free_ids body arg_lenv
+  | App (f, args) -> free_ids f env @ map args
+  | Sys (_, args) -> map args
+  | Tuple elems -> map elems
+  | Get (t, i) -> free_ids t env @ free_ids i env
+  | Set (t, i, e) -> free_ids t env @ free_ids i env @ free_ids e env
+  | Length t -> free_ids t env
+  | Void -> []
+
 
 (**
   Usage:
@@ -105,28 +141,31 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   Compiles a function closure.
 
   Closure structure:
-    [+0] arity
+    [+0] arity, encoded
     [+8] code pointer
     [+16] free id count
     [+24] free id 0
     ...
     [+(16 + 8*k)] free id k
  *)
-let compile_closure (label: string) (arity: int64) (free_vars: string list) (lenv: let_env) =
+let compile_closure (label: string) (arity: int64) (free_vars: string list)
+(lenv: let_env) : instruction list =
   let size = 3 + List.length free_vars in
   let num_fv = Int64.of_int (List.length free_vars) in 
-  let rec store_free_vars (vars: string list) =
-    match vars with 
+  let rec bind_free_ids (ids: string list) =
+    match ids with 
     | [] -> [] 
     | hd::tl ->
       [ IMov (Reg aux_reg, let_lookup hd (lenv,[]));
-        IMov (RegOffset (heap_reg, 3 + (List.length free_vars - List.length vars)), Reg aux_reg)] @
-      store_free_vars tl
+        IMov (
+          RegOffset (heap_reg, 3 + (List.length free_vars - List.length ids)), 
+          Reg aux_reg)]
+      @ bind_free_ids tl
   in
   [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))    (* arity *)
   ; IMov (RegOffset (heap_reg, 1), Label label)                 (* code pointer *)
   ; IMov (RegOffset (heap_reg, 2), Const num_fv)]               (* free var count*)
-  @ store_free_vars free_vars @                     (* free variable values *)
+  @ bind_free_ids free_vars @                       (* store values of enclosed ids *)
   [ IMov (Reg ret_reg, Reg heap_reg)                (* obtain closure pointer *)
   ; IAdd (Reg ret_reg, function_tag)]               (* tag pointer *)
   @ if (size mod 2 = 0) then
@@ -346,7 +385,9 @@ let compile_fof_call  (funexpr: expr) (args: expr list) (env: env)
   @ [IMov (Reg RDI, slot_clos)] (* NEW *)
   @ passed_args 
   @ [IMov (Reg ret_reg, RegOffset (ret_reg, 1));     (* Label *)
-    ICall (Reg ret_reg)] 
+    IPush (Reg closure_reg) ; (* backup closure register *)
+    ICall (Reg ret_reg) ;
+    IPop (Reg closure_reg)] (* restore closure register *) 
   @ restore_rsp @ restore_regs    
 
 (* -----------------------------------
@@ -602,21 +643,25 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
 (* Compiles definitions for first order functions *)
 let compile_fundef (fname: string) (params: string list) (body: expr) 
 (env: env): instruction list =
-  let _, senv = env in
-  let flbl = get_fun_label fname in
-  let lenv = let_env_from_params (fname::params) empty_env in
   let stack_offset = Int64.of_int (stack_offset_for_local body) in
+  let lenv, senv = env in
+  let flbl = get_fun_label fname in
+  let argenv = let_env_from_params (fname::params) empty_env in
+  let fids = remove_repeated @@ free_ids body argenv in
+  let closed_lenv = enclose_lenv fids argenv in
   [IJmp (Label ("end_function_"^flbl)) ;IEmpty;
    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
    IComment ("==> "^fname);
    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
   ILabel flbl ]
   @ callee_prologue 
-  @ [ISub (Reg RSP, Const stack_offset)]
-  @ compile_expr body (lenv, senv)
+  @ [ISub (Reg RSP, Const stack_offset) (* allocate stack space *)
+  ; IMov (Reg closure_reg, Reg RDI) (* closure is in first arg *)
+  ; ISub (Reg closure_reg, function_tag) (* untag closure *)]
+  @ compile_expr body (closed_lenv, senv)
   @ callee_epilogue 
   @ [IRet; ILabel ("end_function_"^flbl) ; IEmpty]
-  @ compile_closure flbl (Int64.of_int @@ List.length params) [] [] 
+  @ compile_closure flbl (Int64.of_int @@ List.length params) fids lenv
 
 (* Compiles constructor, getter, setter and type-checker for a record *)
 (* let compile_recdef (id: string) (fields: string list) (env: env) = *)
@@ -678,12 +723,19 @@ let compile_record (id: string) (fields: string list) (env: env) :
   instruction list * env =
 
   let lenv, senv = env in
-  let rectag = Int64.of_int @@ record_counter () + List.length fields in
+  (* size in bytes of the record (header and fields) *)
+  let rec_size = Int64.of_int @@ (List.length fields + 1) * 8 in 
+  (* tag of this record type *)
+  let rec_tag = (* (len(fields) << 32) + record_counter() *)
+    Int64.add 
+      (Int64.shift_left (Int64.of_int @@ record_counter ()) 32) 
+      (Int64.of_int @@ List.length fields)
+    (* tag includes record size for debugging purposes *)
+  in
 
   let constructor_label = id^"_constructor" in
   let constructor : instruction list =
-    let rec_tag = Int64.of_int @@ Gensym.record_counter () in
-    let cons_env = let_env_from_params fields empty_env, senv in
+    let cons_env = let_env_from_params ("self"::fields) empty_env, senv in
     let rec write_flds (fs: string list) (offset: int) : instruction list =
       match fs with
       | [] -> []
@@ -691,59 +743,67 @@ let compile_record (id: string) (fields: string list) (env: env) :
         [IMov ((RegOffset (heap_reg, offset)), let_lookup hd cons_env)]
         @ write_flds tl (offset + 1)
     in
-    callee_prologue @
-    [ ILabel constructor_label
+    [ ILabel constructor_label]
+    @ callee_prologue @
     (* record tag word = rectag|size *)
-    ; IMov (Reg ret_reg, Const rec_tag)
+    [ IMov (Reg ret_reg, Const rec_tag)
     ; IMov (RegOffset (heap_reg, 0), Reg ret_reg)]
     (* move values to heap *)
     @ write_flds fields 1 @
     (* get and tag pointer *)
     [ IMov (Reg ret_reg, Reg heap_reg)
     ; IAdd (Reg ret_reg, record_tag)
+    (* bump heap pointer *)
+    ; IAdd (Reg heap_reg, Const rec_size)]
     (* return *)
-    ; IRet ; IEmpty]
-    @ callee_epilogue
+    @ callee_epilogue @
+    [ IRet ]
   in
 
   let getter_labels = List.map (fun fld -> id^"_"^fld) fields in
   let getter (index: int) (name: string) : instruction list =
     let rec_reg = RSI in
-    callee_prologue @
     [ILabel (id^"_"^name)]
-    @ type_checking (Reg rec_reg) RecordT 
-    @ check_rectag rec_reg rectag @
-    [ IMov (Reg ret_reg, RegOffset (RSI, index)) (* retrieve element at index *)
-    ; IRet ; IEmpty]
-    @ callee_epilogue
+    @ callee_prologue 
+    @ type_checking (Reg rec_reg) RecordT
+    (* untag pointer and check type *)
+    @ check_rectag rec_reg rec_tag @
+    (* retrieve element at index *)
+    [ IMov (Reg ret_reg, RegOffset (rec_reg, index + 1))]
+    @ callee_epilogue @ 
+    [ IRet ]
   in
 
   let checker_label = id^"?" in
   let checker : instruction list =
     let rec_reg = RSI in
     let end_lbl = id^"?_end" in
-    callee_prologue @
-    [ ILabel checker_label
-    ; IMov (Reg ret_reg, Const false_encoding)
+    
+    [ ILabel checker_label ]
+    @ callee_prologue @
+    [ IMov (Reg ret_reg, Const false_encoding)
     (* check pointer has correct type *)
     ; IMov (Reg aux_reg, Reg rec_reg)
     ; IAnd (Reg aux_reg, tag_bitmask)
     ; ICmp (Reg aux_reg, record_tag)
     ; IJne (Label end_lbl)
     (* check value has correct rectag *)
-    ; IMov (Reg aux_reg, Const rectag)
+    ; ISub (Reg rec_reg, record_tag)
+    ; IMov (Reg aux_reg, Const rec_tag)
     ; ICmp (RegOffset(rec_reg, 0), Reg aux_reg)
     ; IJne (Label end_lbl)
-    (* return true of both tests pass *)
+    (* return true if both tests pass *)
     ; IMov (Reg ret_reg, Const true_encoding)
-    ; ILabel end_lbl
-    ; IRet ; IEmpty]
-    @ callee_epilogue
+    ; ILabel end_lbl]
+    @ callee_epilogue @ 
+    [ IRet ]
   in
 
-  let cons_id = id in
-  let getter_ids = List.map (fun fld -> id^"-"^fld) fields in
-  let checker_id = checker_label in
+  let cons_id = check_function_name id env in
+  let getter_ids = 
+    List.map (fun fld -> check_function_name (id^"-"^fld) env) fields 
+  in
+  let checker_id = check_function_name checker_label env in
 
   let new_env = 
     let cons_env, _ = extend_env cons_id env in
@@ -758,7 +818,11 @@ let compile_record (id: string) (fields: string list) (env: env) :
   in
 
   let end_lbl = id^"_end" in
-  [IJmp (Label end_lbl)]
+  [ IComment "======================================"
+  ; IComment ("Record definition: "^id)
+  ; IComment (Printf.sprintf "tag: 0x%Lx" rec_tag)
+  ; IComment "======================================"
+  ; IJmp (Label end_lbl)]
   @ constructor
   @ (List.concat @@ List.mapi getter fields)
   @ checker
@@ -777,7 +841,9 @@ let rec assemble_prog (prog: prog) (env: env):
   instruction list * instruction list =
   let Program (decls, main) = prog in
   match decls with
-  | [] -> [], compile_expr main env
+  | [] -> [], 
+    [IComment "<<========# Main #========>>"; ILabel "__main__"] 
+    @ compile_expr main env
   | hd::tl ->
     begin
       match hd with
@@ -787,16 +853,13 @@ let rec assemble_prog (prog: prog) (env: env):
           (letrec (id (lambda (params...) body))
             ...) 
         *)
-        let lenv, _ = env in
-        if List.mem_assoc id lenv then 
-          failwith @@ "Duplicate function name: "^id
-        else
-          let new_env, loc = extend_env id env in
-          let externs, instrs = assemble_prog (Program (tl, main)) new_env in
-          externs,
-          compile_fundef id params body new_env
-          @ [IMov (loc, Reg ret_reg)]
-          @ instrs
+        ignore @@ check_function_name id env ;
+        let new_env, loc = extend_env id env in
+        let externs, instrs = assemble_prog (Program (tl, main)) new_env in
+        externs,
+        compile_fundef id params body env
+        @ [IMov (loc, Reg ret_reg)]
+        @ instrs
 
       | SysFunDef (label, ptypes, rtype) ->
         let lenv, senv = env in
@@ -847,7 +910,10 @@ our_code_starts_here:
       pp_instrs callee_prologue 
       pp_instrs (
         [ISub (Reg RSP, Const stack_offset)]
-        @ instrs @ callee_epilogue @ [IRet] @ error_handler) 
+        @ instrs 
+        @ callee_epilogue 
+        @ [IRet] 
+        @ error_handler) 
 
 (* The Pipeline *)
 let compile_src = 

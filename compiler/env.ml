@@ -6,17 +6,16 @@ open Ast
 type memloc =
 | MReg of reg
 | StackOffset of int
+| ClosureOffset of int
 
 let memloc_to_arg (m: memloc) : arg =
   match m with
   | MReg r -> Asm.Reg r
   | StackOffset n -> Asm.RegOffset (RBP, -n)
+  | ClosureOffset n -> Asm.RegOffset (closure_reg, 3 + n)
 
 let pp_memloc fmt loc =
-  match loc with
-  | MReg r -> pp_arg fmt (Reg r)
-  | StackOffset n -> pp_arg fmt (RegOffset (RBP, n))
-
+  pp_arg fmt (memloc_to_arg loc)
 
 (*---------------------------
 | Environments (namespaces) |
@@ -104,7 +103,7 @@ caller they precede values bound by the callee in the env. For this reason
 this function assumes there won't be registers or negative stack offsets
 after the first let-bound value (positive stack offset.
 *)
-let get_let_slot (env: let_env) : memloc =
+let get_stack_slot (env: let_env) : memloc =
   match env with 
   | [] -> StackOffset 1 (*env is empty*)
   | (_, loc)::_ -> 
@@ -114,6 +113,7 @@ let get_let_slot (env: let_env) : memloc =
       | StackOffset n -> 
         if n < 0 then StackOffset 1 (*negative offsets are arguments*)
         else StackOffset (n + 1) 
+      | ClosureOffset _ -> StackOffset 1 (* closure variable *)
     end
 
 (* Returns the memory location for a function argument. In the x64 calling
@@ -140,7 +140,7 @@ let get_arg_slot (env: let_env) : memloc =
 
 (* Extends the environment with a new id and its respective offset in stack *)
 let extend_let_env (name: string) (env: let_env) : (let_env * arg) =
-  let loc = get_let_slot env in
+  let loc = get_stack_slot env in
   ((name, loc)::env, memloc_to_arg loc)
 
 (* Extends an environment with a new let-bound variable *)
@@ -232,3 +232,23 @@ let rec multi_extend_env (bindings: string list) (env: env) : env * arg list =
     let new_env, loc = extend_env hd env in
     let return_env, loc_list = multi_extend_env tl new_env in
     return_env, loc::loc_list
+
+(* concatenates two let_env's *)
+let rec concat_let_env (env1: let_env) (env2: let_env) : let_env =
+  match env1 with
+  | [] -> env2
+  | hd::tl -> hd::(concat_let_env tl env2)
+
+(* builds a let env that allows access to closure bound args.
+  We assume that closure bound ids always precede let bound ones, and follow
+  function arguments. *)
+  let rec enclose_lenv (fids: string list) (outer_env: let_env) : let_env =
+  match fids with
+  | [] -> outer_env
+  | id::tl ->
+    begin
+      match outer_env with
+      | (_, ClosureOffset n)::_ ->
+        enclose_lenv tl ((id, ClosureOffset (n + 1))::outer_env)
+      | _ -> enclose_lenv tl ((id, ClosureOffset 0)::outer_env)
+    end

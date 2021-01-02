@@ -13,10 +13,10 @@ type reg =
 | R8    (* 5th Param      |   R *)
 | R9    (* 6th Param      |   R *)
 | R10   (* Closure        |   R *)
-| R11   (* Temp Register  |   R *)
+| R11   (* Scratch        |   R *)
 | R12   (* Error Code Reg |   R *)
 | R13   (* Error Arg Reg  |   R *)
-| R14   
+| R14   (* Error scratch  |   E *)
 | R15   (* HEAP Register  |   E *)
 (* R = caller-save ; E = callee-save *)
 
@@ -157,7 +157,7 @@ let pp_instrs : (instruction list) Fmt.t =
 let ret_reg = RAX
 (* Closure currently being executed is always in R10, which is a caller-save
 register. NOT IMPLEMENTED (yet) *)
-(* let closure_reg = R10 *)
+let closure_reg = R10
 let aux_reg = R11
 let heap_reg = R15
 let arg_regs = [

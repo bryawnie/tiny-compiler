@@ -1,6 +1,8 @@
 open Asm
 open Ast
 open Encode
+open Gensym
+open Env
 
 (* INTEGER ERROR CODES *)
 let not_a_number = Const 1L
@@ -19,10 +21,26 @@ let not_a_closure = Const 9L
 
 let err_code_reg = R12
 let err_val_reg = R13
+let err_aux_reg = R14
 let error_handler_label = "error_handler"
 
-(* ERROR HANDLERS*)
+(* COMPILE TIME ERRORS *)
 
+(*  check_function_name
+  Raises an appropiate error if the env already contains another value 
+bound to the same identifier. This is meant to be used with functions 
+defined with the 'def' keyword. 
+*)
+let check_function_name (fname: string) (env: env) : string =
+  let lenv, _ = env in
+  if List.mem_assoc fname lenv then 
+    Fmt.failwith "Duplicate function name: %s" fname;
+  fname
+
+
+(* RUNTIME ERRORS *)
+
+(* ERROR HANDLER *)
 let error_handler =
   [ILabel error_handler_label;
    IMov (Reg RSI, (Reg err_val_reg));
@@ -35,12 +53,15 @@ let error_handler =
   This function handles the request for a type checking
 *)
 let type_checking (register: arg) (expected_type: dtype): instruction list =
+  let lbl = typechk_gensym () in
   let tag_check error_code type_tag =
-    [IMov ((Reg err_val_reg), register) 
+    [ILabel lbl
+    ;IMov ((Reg err_val_reg), register) 
     ;IAnd ((Reg err_val_reg), tag_bitmask) 
     ;ICmp ((Reg err_val_reg), type_tag) 
     ;IMov ((Reg err_code_reg), error_code) 
     ;IMov ((Reg err_val_reg), register)
+    ;IMov (Reg err_aux_reg, Label lbl)
     ;IJnz (Label error_handler_label)]
   in
   let beg_comm = 
@@ -51,10 +72,11 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
   in
   beg_comm @
   begin match expected_type with
-  | IntT -> [
+  | IntT -> [ILabel lbl ;
     IMov ((Reg err_val_reg), register) ;
     IMov ((Reg err_code_reg), not_a_number) ;
-    ITest (Reg err_val_reg, Const 1L) ; 
+    ITest (Reg err_val_reg, Const 1L) ;
+    IMov (Reg err_aux_reg, Label lbl) ;
     IJnz (Label error_handler_label);
   ]
   | BoolT -> tag_check not_a_boolean bool_tag
@@ -72,11 +94,13 @@ let type_checking (register: arg) (expected_type: dtype): instruction list =
   effectively the required number of args.
 *)
 let check_arity (arity: arg) (args: int) : instruction list =
-  [ 
+  let lbl = (errorchk_gensym ()) in
+  [ ILabel lbl;
     IComment "INIT Function arity check";
     IMov ((Reg err_code_reg), arity_mismatch_error) ; 
     IMov ((Reg err_val_reg), arity) ;
-    ICmp ((Reg err_val_reg), Const (encode_int (Int64.of_int args)));     
+    ICmp ((Reg err_val_reg), Const (encode_int (Int64.of_int args)));  
+    IMov (Reg err_aux_reg, Label lbl) ;   
     IJne  (Label error_handler_label);
     IComment "END  Function arity check";
   ]
@@ -88,7 +112,9 @@ let check_arity (arity: arg) (args: int) : instruction list =
   avoid overflows with bigger indexes
 *)
 let check_index (index: arg) : instruction list =
+  let lbl = errorchk_gensym () in
   [ (* Negative Index Error *)
+    ILabel lbl ;
     IComment "Begin Check: Positive Index for Tuples";
     IMov ((Reg err_code_reg), neg_index) ; 
     IMov ((Reg err_val_reg), index) ;
@@ -99,6 +125,7 @@ let check_index (index: arg) : instruction list =
     IComment "Begin Check: Index out of Bounds";
     IMov ((Reg err_code_reg), index_overflow) ; 
     ICmp (index, RegOffset (RAX, 0)); 
+    IMov (Reg err_aux_reg, Label lbl) ;
     IJge (Label error_handler_label);
     IComment "End Check: Index out of Bounds";
   ]
@@ -109,11 +136,17 @@ let check_index (index: arg) : instruction list =
   tag, which is a 64bit word where the first 32 bits are an arbitrary 
   integer and the last 32 bits indicate the size of the record.
 
-  RAX gets clobbered
+  value is returned untagged in the same register it was pased in.
 *)
-let check_rectag (pointer: reg) (expected_tag: int64) : instruction list =
-  [ IMov (Reg err_code_reg, record_type_error)
-  ; IMov (Reg err_val_reg, Reg pointer)
-  ; IMov (Reg ret_reg, Const expected_tag)
-  ; ICmp (RegOffset (pointer, 0), Reg ret_reg)
-  ; IJne (Label error_handler_label)]
+let check_rectag (rec_reg: reg) (expected_tag: int64) : instruction list =
+  let lbl = errorchk_gensym () in
+  [ ILabel lbl
+  ; IComment "tag check" 
+  ; IMov (Reg err_val_reg, Reg rec_reg)
+  ; IMov (Reg err_code_reg, record_type_error)
+  ; ISub (Reg rec_reg, record_tag)
+  ; IMov (Reg err_aux_reg, Const expected_tag)
+  ; ICmp (RegOffset (rec_reg, 0), Reg err_aux_reg)
+  ; IMov (Reg err_aux_reg, Label lbl)
+  ; IJne (Label error_handler_label)
+  ; IComment "end tag check"]

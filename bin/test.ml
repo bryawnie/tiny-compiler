@@ -120,6 +120,17 @@ let parse_tests =
       (Failure "Not a valid function: def")
       (fun () -> ignore @@
         parse_prog (sexp_list_from_string "(def (f) 1)\n(def (g x) (+ x 1))"));
+    check prog "Declarations should be in the correct order"
+      (Program (
+          [FunDef ("f", ["x"], Id "x") ; 
+           FunDef ("g", ["y"], Id "y") ;
+           FunDef ("h", ["z"], Id "z")], 
+          Num 0L))
+      (parse_prog 
+        (sexp_list_from_string "(def (f x) x)\n(def (g y) y)\n(def (h z) z)\n0")) ;
+    check prog "Void program"
+      (Program ([FunDef ("f", ["x"], Id "x")], Void))
+      (parse_prog (sexp_list_from_string "(def (f x) x)\nvoid"))
   in
 
   let test_parse_record () =

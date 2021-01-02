@@ -185,5 +185,6 @@ let parse_decl (sexp : sexp) : decl =
 
 let parse_prog (sexps : sexp list) : prog = 
   match List.rev sexps with
-  | expr::decls -> Program (List.map parse_decl decls, parse_expr expr)
+  | expr::decls -> 
+    Program (List.map parse_decl (List.rev decls), parse_expr expr)
   | [] -> Program ([], Void)
