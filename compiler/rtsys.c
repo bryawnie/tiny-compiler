@@ -38,12 +38,14 @@ const val VAL_FALSE = TAG_BOOL;
 #define GET_RECORD_SIZE(v) (*VAL_TO_PTR(v) & RECORD_SIZE_BITMASK)
 #define GET_RECORD_TYPE(v) (*VAL_TO_PTR(v) & ~RECORD_SIZE_BITMASK) >> 32
 #define RECORD_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
+#define CLOSURE_ARITY(v) (*VAL_TO_PTR(v) >> 1)
+#define CLOSURE_ADDRESS(v) (*(VAL_TO_PTR(v)+1))
 
 /* Format strings */
 const char *STR_TRUE = "true";
 const char *STR_FALSE = "false";
 
-enum error_code {
+typedef enum error_code {
   NOERR,
   ERR_NOT_NUMBER,
   ERR_NOT_BOOLEAN,
@@ -54,17 +56,17 @@ enum error_code {
   ERR_RECORD_TYPE,
   ERR_ARITY_MISMATCH,
   ERR_NOT_CLOSURE
-};
-typedef enum error_code errcode;
+} errcode;
 
-enum data_type {
+typedef enum data_type {
   TYPE_INT,
   TYPE_BOOL,
   TYPE_TUPLE,
-  TYPE_RECORD
-};
-typedef enum data_type dtype;
+  TYPE_RECORD,
+  TYPE_CLOSURE
+} dtype;
 
+/* determines the data type of a value */
 dtype typeofval(val v) {
   
   // fprintf(stderr, "typeofval(defsys raw_print any -> any): v=%ld\n", v);
@@ -76,7 +78,9 @@ dtype typeofval(val v) {
   return (dtype) 1 + (v & TAG_BITMASK)/2;
 }
 
+/* applies charcount to an array of values */
 int arr_charcount(val *v, int size);
+
 /* Counts the maximum amount of characters required to print a value. */
 int charcount(val v) {
   
@@ -110,8 +114,10 @@ int arr_charcount(val *a, int size) {
   return count;
 }
 
+/* applies sprintval to an array of values */
 int arr_sprintval(char *str, val* a, int size, char* prefix, char* suffix);
 
+/* prints a formatted value to as string */
 int sprintval(char *str, val v) {
   
   /* fprintf(stderr, "sprintval: str=%p, v=%ld\n", str, v); */
@@ -141,7 +147,13 @@ int sprintval(char *str, val v) {
       return arr_sprintval(str, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
 
     case TYPE_RECORD:
+      if (GET_RECORD_SIZE(v) == 0)
+        return sprintf(str, "{}");
       return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
+
+    case TYPE_CLOSURE:
+      return sprintf(str, "<Function at %#.16lx with arity %d>",
+        CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
 
     default:
       return sprintf(str, "Unknown value: %#018lx", v);
@@ -177,6 +189,12 @@ char *val_to_str(val v) {
 }
 
 void error(int errCode, val v) {
+
+  /* this is a quick fix for a mysterious segfault */
+  if (errCode == ERR_RECORD_TYPE) {
+    fprintf(stderr, "Got record with incorrect type!\n");
+    exit(errCode);
+  }
   
   char *str = val_to_str(v);
   int_v int_value = (int_v) v;
@@ -242,6 +260,10 @@ val print(val v) {
 
     case TYPE_RECORD:
     printf("> {record}\n");
+    break;
+
+    case TYPE_CLOSURE:
+    printf("> <function>\n");
     break;
 
     default:

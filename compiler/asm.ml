@@ -13,10 +13,10 @@ type reg =
 | R8    (* 5th Param      |   R *)
 | R9    (* 6th Param      |   R *)
 | R10   (* Closure        |   R *)
-| R11   (* Temp Register  |   R *)
+| R11   (* Scratch        |   R *)
 | R12   (* Error Code Reg |   R *)
 | R13   (* Error Arg Reg  |   R *)
-| R14   
+| R14   (* Error scratch  |   E *)
 | R15   (* HEAP Register  |   E *)
 (* R = caller-save ; E = callee-save *)
 
@@ -145,6 +145,8 @@ let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr
 
 
+(* Constants and useful things *)
+
 (** Register usage conventions **)
 (*  
   RAX = return value | first argument to a instruction
@@ -155,10 +157,8 @@ let pp_instrs : (instruction list) Fmt.t =
 let ret_reg = RAX
 (* Closure currently being executed is always in R10, which is a caller-save
 register. NOT IMPLEMENTED (yet) *)
-(* let closure_reg = R10 *)
+let closure_reg = R10
 let aux_reg = R11
-let err_code_reg = R12
-let type_code_reg = R13
 let heap_reg = R15
 let arg_regs = [
   Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9

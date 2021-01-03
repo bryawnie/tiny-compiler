@@ -19,3 +19,7 @@ translates to
         ...)
 
 However, def'd functions can be recursive while let-bound lambdas can not.
+
+
+================
+Change closure from RDI to R10

@@ -1,0 +1,9 @@
+NAME: let05
+STATUS: CT error
+SRC:
+(let (x 3)
+    (let (y 4)
+        (let (z 5)
+            (+ (+ a b) y))))
+EXPECTED:
+Unbound identifier: a

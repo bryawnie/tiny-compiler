@@ -4,6 +4,6 @@ STATUS: CT error
 SRC:
 (record pancito palta tomate)
 (record pancito mantequilla)
-(void)
+void
 EXPECTED:
 Duplicate function name: pancito
