@@ -1,7 +1,7 @@
-NAME: (GET) Not a tuple
+NAME: (SET) Not a tuple
 DESCRIPTION: Tuple definition
 STATUS: RT error
 SRC:
-(get true 5)
+(set true 5 6)
 EXPECTED:
 Expected tuple, but got true

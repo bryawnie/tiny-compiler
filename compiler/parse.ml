@@ -107,6 +107,14 @@ let rec parse_expr (sexp : sexp) : expr =
     Let ((parse_defs parse_expr) defs, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
+  | `List [`Atom "λ" ; `List ids; body] -> 
+    let rec toStrAtoms (sexps: t list): string list =
+       match sexps with 
+       | [] -> []
+       | `Atom x::tl -> [x] @ toStrAtoms tl
+       | _ -> Fmt.failwith "Bad Arguments in function definition" 
+    in
+    Fun (toStrAtoms ids, parse_expr body)
   | `List [`Atom "get" ; t; i] -> 
     Get (parse_expr t, parse_expr i)
   | `List [`Atom "set" ; t; i; v] -> 
@@ -122,7 +130,7 @@ let rec parse_expr (sexp : sexp) : expr =
       then Fmt.failwith "Not a valid function: %s" fname else
     begin match Int64.of_string_opt fname with
       | Some _ -> Fmt.failwith "Not a valid function: %s" fname
-      | None -> App (fname, List.map parse_expr args) (* FIX *)
+      | None -> App (Id fname, List.map parse_expr args) (* FIX *)
     end 
   | e -> Fmt.failwith "Not a valid exp: %a" CCSexp.pp e
 
@@ -177,5 +185,6 @@ let parse_decl (sexp : sexp) : decl =
 
 let parse_prog (sexps : sexp list) : prog = 
   match List.rev sexps with
-  | expr::decls -> Program (List.map parse_decl decls, parse_expr expr)
+  | expr::decls -> 
+    Program (List.map parse_decl (List.rev decls), parse_expr expr)
   | [] -> Program ([], Void)

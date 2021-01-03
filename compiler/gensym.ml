@@ -19,6 +19,8 @@ let tmp_gensym = create_gensym "tmp"
 let and_gensym = create_gensym "and"
 let or_gensym = create_gensym "or"
 let fun_gensym = create_gensym "fun"
+let typechk_gensym = create_gensym "type_check"(* type check *)
+let errorchk_gensym = create_gensym "error_check" (* other error checks *)
 
 (* returns a label that can be used in assembly *)
 let get_fun_label fun_name =

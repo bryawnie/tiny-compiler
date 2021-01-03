@@ -45,7 +45,8 @@ type expr =
   | BinOp of binOp * expr * expr
   | Let of (string * expr) list * expr
   | If  of expr * expr * expr
-  | App of string * expr list (* first order function application *)
+  | Fun of (string list) * expr
+  | App of expr * expr list   (* first class function application *)
   | Sys of string * expr list (* foreign function application *)
   | Tuple of expr list        (* Components of the tuple *)
   | Get of expr * expr        (* Tuple, desired index *)
@@ -66,6 +67,7 @@ type dtype =
   | BoolT
   | TupleT
   | RecordT
+  | ClosureT
   | AnyT
 
 type decl =
@@ -98,7 +100,7 @@ let pp_binop fmt = function op ->
   | Eq   -> "="
   in string fmt str
 
-let rec pp_expr_list (pp_exp: expr Fmt.t): (expr list) Fmt.t =
+let rec pp_expr_list (pp_exp: 'a Fmt.t): ('a list) Fmt.t =
   fun fmt l ->
     match l with
     | [] -> pf fmt ""
@@ -109,6 +111,9 @@ let rec pp_defs (pp_exp: expr Fmt.t): ((string * expr) list) Fmt.t =
     match l with
     | [] -> pf fmt ""
     | (id, v)::rest -> pf fmt "(%a %a) %a" string id pp_exp v (pp_defs pp_exp) rest
+
+let pp_id fmt = 
+  fun x -> string fmt x
     
 
 (* Pretty printer for expresions *)
@@ -121,7 +126,8 @@ let rec pp_expr fmt =
   | BinOp (op, x1, x2)  -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
   | Let (defs,b)         -> pf fmt "(let (%a) %a)" (pp_defs pp_expr) defs pp_expr b
   | If (c, t, f)        -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
-  | App (fname, exprs)  -> pf fmt "(%a %a)" string fname (pp_expr_list pp_expr) exprs
+  | Fun (ids, body)     -> pf fmt "(λ (%a) %a)" (pp_expr_list pp_id) ids pp_expr body
+  | App (fname, exprs)  -> pf fmt "(%a %a)" pp_expr fname (pp_expr_list pp_expr) exprs
   | Sys (fname, exprs)  -> pf fmt "(@sys %s %a)" fname (pp_expr_list pp_expr) exprs
   | Tuple exprs         -> pf fmt "(tup %a)" (pp_expr_list pp_expr) exprs
   | Get (t, index)      -> pf fmt "(get %a %a)" pp_expr t pp_expr index
@@ -138,8 +144,21 @@ let pp_dtype fmt =
   | BoolT -> pf fmt "bool"
   | TupleT -> pf fmt "tuple"
   | RecordT -> pf fmt "record"
+  | ClosureT -> pf fmt "function"
   | AnyT -> pf fmt  "any"
 
+(* 
+  ----- Type to String -----
+  Used for assembly comments
+*)
+let str_type (t: dtype): string =
+  match t with
+  | IntT    -> "Integer"
+  | BoolT   -> "Boolean"
+  | TupleT  -> "Tuple"
+  | RecordT -> "Record"
+  | ClosureT -> "Function"
+  | AnyT    -> "Any"
 
 let pp_decl fmt =
   function

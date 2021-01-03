@@ -1,0 +1,6 @@
+NAME: a simple lambda definition
+SRC:
+(let (sum1 (λ (x) (add1 x)))
+    (sum1 2))
+
+EXPECTED: 3

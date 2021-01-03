@@ -12,8 +12,11 @@ type reg =
 | RBP   (* Base Pointer   |   E *)
 | R8    (* 5th Param      |   R *)
 | R9    (* 6th Param      |   R *)
-| R10   (*                |   R *)
-| R11   (* Temp Register  |   R *)
+| R10   (* Closure        |   R *)
+| R11   (* Scratch        |   R *)
+| R12   (* Error Code Reg |   R *)
+| R13   (* Error Arg Reg  |   R *)
+| R14   (* Error scratch  |   E *)
 | R15   (* HEAP Register  |   E *)
 (* R = caller-save ; E = callee-save *)
 
@@ -22,6 +25,7 @@ type reg =
 type arg =
 | Const of int64          (* Constant of 64 bits *)
 | Reg of reg              (* Register *)
+| Label of string         (* Label *)
 | RegOffset of reg * int  (* Reg and its offset *)
 
 
@@ -41,15 +45,15 @@ type instruction =
 | IShl of arg * arg   (* Logical left shift *)
 | ICmp of arg * arg   (* Comparer (-) *)
 | ITest of arg * arg  (* Comparer (&) *)
-| IJe  of string      (* Jumps if equal *)
-| IJne of string      (* Jump if not equal*)
-| IJnz of string      (* Jumps if not zero *)
-| IJz of string       (* Jumps if zero *)
-| IJl  of string      (* Jumps if less than *)
-| IJg of string       (* Jumps if greater than *)
-| IJge of string      (* Jumps if greater or equal than *)
-| IJmp of string      (* Makes a jump *)
-| ICall of string     (* Calls a function *)
+| IJe  of arg         (* Jumps if equal *)
+| IJne of arg         (* Jump if not equal*)
+| IJnz of arg         (* Jumps if not zero *)
+| IJz  of arg         (* Jumps if zero *)
+| IJl  of arg         (* Jumps if less than *)
+| IJg  of arg         (* Jumps if greater than *)
+| IJge of arg         (* Jumps if greater or equal than *)
+| IJmp of arg         (* Makes a jump *)
+| ICall of arg        (* Calls a function *)
 | ILabel of string    (* Simple Label *)
 | ICqo                (* Extends RAX into RDX *)
 | IPush of arg        (* Pushes an argument into the stack *)
@@ -77,6 +81,9 @@ let pp_reg : reg Fmt.t =
     | R9  -> Fmt.string fmt "R9"
     | R10 -> Fmt.string fmt "R10"
     | R11 -> Fmt.string fmt "R11"
+    | R12 -> Fmt.string fmt "R12"
+    | R13 -> Fmt.string fmt "R13"
+    | R14 -> Fmt.string fmt "R14"    
     | R15 -> Fmt.string fmt "R15"
 
 
@@ -86,6 +93,7 @@ let pp_arg : arg Fmt.t =
     match arg with
     | Const n         -> Fmt.pf fmt "%#Lx" n
     | Reg r           -> pp_reg fmt r
+    | Label lbl       -> Fmt.string fmt lbl
     | RegOffset (r,i) -> 
       if i > 0 then
         Fmt.pf fmt "qword[%a + %a]" pp_reg r Fmt.int (8*i)
@@ -109,18 +117,18 @@ let pp_instr : instruction Fmt.t =
   | IShl (a1, a2) -> Fmt.pf fmt "  shl  %a, %a" pp_arg a1 pp_arg a2
   | ICmp (a1, a2) -> Fmt.pf fmt "  cmp  %a, %a" pp_arg a1 pp_arg a2
   | ITest (a1, a2)-> Fmt.pf fmt "  test %a, %a" pp_arg a1 pp_arg a2
-  | IJe  lbl      -> Fmt.pf fmt "  je   %a" Fmt.string lbl
-  | IJne lbl      -> Fmt.pf fmt "  jne  %s" lbl
-  | IJz  lbl      -> Fmt.pf fmt "  jz   %a" Fmt.string lbl
-  | IJnz lbl      -> Fmt.pf fmt "  jnz  %a" Fmt.string lbl
-  | IJl  lbl      -> Fmt.pf fmt "  jl   %a" Fmt.string lbl
-  | IJge lbl      -> Fmt.pf fmt "  jge  %a" Fmt.string lbl
-  | IJg  lbl      -> Fmt.pf fmt "  jg   %a" Fmt.string lbl
-  | IJmp lbl      -> Fmt.pf fmt "  jmp  %a" Fmt.string lbl
+  | IJe  lbl      -> Fmt.pf fmt "  je   %a" pp_arg lbl
+  | IJne lbl      -> Fmt.pf fmt "  jne  %a" pp_arg lbl
+  | IJz  lbl      -> Fmt.pf fmt "  jz   %a" pp_arg lbl
+  | IJnz lbl      -> Fmt.pf fmt "  jnz  %a" pp_arg lbl
+  | IJl  lbl      -> Fmt.pf fmt "  jl   %a" pp_arg lbl
+  | IJge lbl      -> Fmt.pf fmt "  jge  %a" pp_arg lbl
+  | IJg  lbl      -> Fmt.pf fmt "  jg   %a" pp_arg lbl
+  | IJmp lbl      -> Fmt.pf fmt "  jmp  %a" pp_arg lbl
   | ILabel lbl    -> Fmt.pf fmt "%a:" Fmt.string lbl
   | ICqo          -> Fmt.pf fmt "  cqo" 
   | IRet          -> Fmt.pf fmt "  ret" 
-  | ICall f       -> Fmt.pf fmt "  call %a" Fmt.string f
+  | ICall f       -> Fmt.pf fmt "  call %a" pp_arg f
   | IOr (a1, a2)  -> Fmt.pf fmt "  or   %a, %a" pp_arg a1 pp_arg a2
   | IAnd (a1, a2) -> Fmt.pf fmt "  and  %a, %a" pp_arg a1 pp_arg a2
   | IXor (a1, a2) -> Fmt.pf fmt "  xor  %a, %a" pp_arg a1 pp_arg a2
@@ -135,3 +143,23 @@ let pp_instr : instruction Fmt.t =
 (* A pretty printing for instruction list *)
 let pp_instrs : (instruction list) Fmt.t =
   Fmt.list ~sep:Format.pp_force_newline pp_instr
+
+
+(* Constants and useful things *)
+
+(** Register usage conventions **)
+(*  
+  RAX = return value | first argument to a instruction
+  R11 = second argument to a instruction
+  RBX = Error code register
+  RCX = Error var register 
+*)
+let ret_reg = RAX
+(* Closure currently being executed is always in R10, which is a caller-save
+register. NOT IMPLEMENTED (yet) *)
+let closure_reg = R10
+let aux_reg = R11
+let heap_reg = R15
+let arg_regs = [
+  Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9
+]

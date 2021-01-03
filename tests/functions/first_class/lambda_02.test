@@ -1,0 +1,7 @@
+NAME: lambda with free vars
+SRC:
+(let (n 5)
+    (let (addn (λ (x) (+ x n)))
+        (addn 3)))
+
+EXPECTED: 8

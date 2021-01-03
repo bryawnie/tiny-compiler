@@ -1,0 +1,7 @@
+NAME: random test
+DESCRIPTION: check that functions have correct scoping
+STATUS: CT error
+SRC:
+(+ c (+ a b))
+EXPECTED:
+Unbound identifier: c

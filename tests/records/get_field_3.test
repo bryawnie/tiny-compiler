@@ -1,0 +1,13 @@
+NAME: field getter
+SRC:
+(record point3d x y z)
+(def (invert p)
+    (point3d
+        (- 0 (point3d-x p))
+        (- 0 (point3d-y p))
+        (- 0 (point3d-z p))))
+(let (p (point3d 2 3 -4))
+    (invert p))
+
+EXPECTED:
+{-2 -3 4}

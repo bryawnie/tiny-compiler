@@ -1,0 +1,7 @@
+NAME: (SET) Negative Index
+DESCRIPTION: Tuple definition
+STATUS: RT error
+SRC:
+(set (tup 1 2 3) -1 4)
+EXPECTED:
+Unexpected negative index -1

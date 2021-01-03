@@ -3,176 +3,133 @@ __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
 
-# Entrega 3
-Esta entrega contempla algunas mejoras a la versión `v0.2`, donde se proteje el proceso de llamado de funciones (impidiendo un solapamiento de llamadas), y se realiza una refactorización de código con fines de mejorar su comprensión. 
+# Entrega 4
+En esta entrega se añade una esperada *feature* para el lenguaje, **funciones de primera clase**. Recordamos que en las versiones previas, solo se contaba con funciones de primer orden, las cuales son bastante limitadas, dado que deben definirse de forma aparte, y además no podían ser tratadas como valores. En esta nueva versión, se añade soporte a las siguientes *specs básicas* esperadas:
+- [x] Funciones como valores de primera clase.
+- [x] Lambdas y clausuras.
 
-Respecto a las nuevas *features* del lenguaje, los requerimientos básicos para esta entrega son:
-- [x] Tuplas.
-- [x] `get` en tuplas.
-- [x] Mutación de tuplas (`set`).
+La característica adicional
+- [ ] Recursión.
 
-Mientras que los requerimientos extra:
-- [x] Records.
-- [x] Pattern-matching de tuplas.
-
-Todas ellos fueron implementados.
+No fue implementada (yet).
 
 ## Especificación
+### Funciones como Valores
+Se realiza un *upgrade* a las funciones de primer orden previamente implementadas por el lenguaje. En este nuevo escenario, estas pueden ser tratadas como valores, permitiendo su paso a través de llamada de funciones. Un ejemplo puede ser el siguiente:
+```
+(def (applyToFive it)
+  (it 5))
 
-### Tuplas
-Una tupla es un tipo de dato que consiste en una secuencia de `n` elementos. Una tupla se construye con la operación `(tup e1 ... en)`, donde `e1 ... en` son los elementos de esta. Para operar sobre ella se utiliza `(get n t)` para obtener el `n`-ésimo elemento de la tupla `t` y, análogamente, se utiliza `(set n t v)` para cambiar su valor a `v`. Al igual que las listas y arreglos en muchos lenguajes de programación, los índices comienzan desde 0.
+(def (incr x)
+  (+ x 1))
 
-### Record
-Los records son estructuras de datos similares a las `struct` de C. Cada tipo de record posee un identificador y cero o más campos con nombre, similares a los elementos de una tupla. Para declarar un nuevo tipo de record se utiliza una expresión de la forma `(record <id> <campo1> ... <campon>)`. Una vez definido un record se pueden utilizar las siguientes funciones:
--  Constructor `<id> : any ... any -> record`. Recibe tantos argumentos como campos tenga el tipo de record y retorna un record de tipo `<id>` con los valores proporcionados.
-- `<id>-<campoi> : record -> any`. Retorna el valor del campo `<campoi>` del record proporcionado. El record debe ser de tipo `<id>`. Se crea una de estas funciones por cada campo.
-- `<id>? : any -> bool`. Determina si el elemento pasado como argumento es un record del tipo `<id>`.
+(applyToFive incr)
+```
+Se observa cómo `applyToFive` recibe como argumento una función `it`, la cual es aplicada al valor 5. Es decir, ahora una función pasa a ser una `expr` como cualquier otra.
 
-### Let Upgrade
-Resultó conveniente hacer un *upgrade* a las expresiones `let`. En concreto, antes cada expresión sólo podía introducir un nuevo identificador en *scope*, y la sintaxis era:
+### Lambdas (λ)
+Se implementan funciones lambdas (o anónimas), las cuales pueden definirse dentro de una sentencia `let`. Estas funciones no poseen nombre alguno, y su existencia permite funciones de orden superior como `addn`, la cual recibe un argumento `n` y retorna una función que suma n a su propio argumento. Se presenta un ejemplo:
 ```
-(let (<id> <val>) <body_exp>)
-``` 
-ahora, un let ofrece la posibilidad de introducir un número indefinido de variables de una sola vez, pasando a tener una sintaxis:
+(let (addn (λ (n) 
+            (λ (x) (+ x n))))
+    (let (add5 (addn 5))
+        (add5 6)))
 ```
-(let ((<id_1> <va_1>) (<id_2> <val_2>) ... (<id_n> <val_n>)) <body_exp>)
+El programa anterior debería devolver 11, pues `add5` es una función que suma 5 a su argumento.
+
+Se observa a través del ejemplo que la sintaxis concreta para definir funciones anónimas es:
+```
+(λ (<ids> ...) <body>)
 ```
 
-Un ejemplo puede ser la introducción de tres variables `x`, `y`, `z`, con valores 3, 4 y 5:
-
-**Antes**: Estaba la necesidad de introducir cada variable en un `let` distinto.
+### Clausuras
+Al momento de definir funciones, en especial las lambdas, se hace necesario capturar el ambiente de definición para conservar *scope* léxico. Esto permite poder acceder a las ids definidas fuera de la función, las cuales podrían ser detectadas como identificadoes libres si no se resguardan adecuadamente. Por ejemplo:
 ```
-(let (x 3)
-  (let (y 4)
-    (let (z 5)
-      (+ (+ x y) z))))
+(let (n 5)
+    (let (addn (λ (x) (+ x n)))
+        (addn 3)))
 ```
-**Ahora**: Basta con una sóla instancia de `let`.
-```
-(let ((x 3) (y 4) (z 5))
-  (+ (+ x y) z))
-```
-_NOTA:_ A modo de simplificar la introducción de una sola variable, se mantiene retrocompatibilidad con la sintaxis previamente existente.
-
-### Pattern-matching
-
-Un _pattern-matching_ de tuplas, consiste en una expresión que permite descomponerlas en variables que contengan sus elementos. La sintaxis utilizada es:
-```
-(let ((tup <id_1> <id_2> ... <id_n>) t)
-          <body>)
-```
-donde t es una tupla previamente existente que contiene exactamente `n` valores. Un ejemplo puede ser:
-```
-(let ((tup a b c) (tup 1 3 5))
-          (+ a b))
-```
-cuyo resultado debiese ser 4.
+El programa anterior debería entregar como resultado 8. Sin embargo, si el acceso a `n` dentro de la función se pierde, generaría un error. Por tanto, es necesario encapsular esto en clausuras. En particular, las funciones definidas con `def`, no requieren guardar ninguna variable libre ya que al momento de su definición, aun no se introduce ninguna variable en *scope*. Sin embargo, se opta por representarlas mediante clausuras igualmente, para mayor armonía entre funciones.
 
 ## Implementación
-### Tuplas
-La natureleza compuesta y el largo variable de este tipo de dato significan que no cabe en un registro del procesador. Por tanto, para implementarlo es necesario que el programa pueda hacer uso del *heap*. Así, un valor de tipo `Tuple` es en realidad un puntero a un espacio en el *heap*, y es ahí donde se encuentran los valores de la tupla. Para poder saber el largo de esta estructura, los valores siempre están precedidos en el heap por un entero que contiene esa información.
+Tanto funciones definidas fuera del programa principal con `def`, como las funciones lambdas fueron implementadas mediante clausuras, por lo tanto, se tratará a ambas por igual desde este punto, con la única salvedad de que las funciones previamente definidas no requieren añadir variables libres a su scope, y que poseen un nombre definido, lo que simplifica su referencia al aplicar recursión.
 
-Ahora bien, puesto que este es el tercer tipo de dato añadido al lenguaje, ya no es posible utilizar un único bit para determinar el tipo de un valor. Para solucionar este problema es necesario utilizar más bits. Si se asume que todos los elementos almacenados en el heap son valores de 64 bits, entonces los últimos tres bits de un puntero son siempre iguales para una misma dirección de inicio del heap. Así, basta imponer que el inicio del heap esté a alineado a un múltiplo de 8 para asegurar que los últimos 3 bits de los punteros serán 0, con lo que es posible utilizar esos bits como tag y aún así tener la capacidad de recuperar el puntero original. Con esto, se establecen los siguientes marcadores de tipo:
+Para la implementación de clausuras, se establece una estructura de datos en heap de la siguiente forma:
+
+N° Params | Label | N° Free Ids | Free Id #1 | ... | Free Id #n
+-- | -- | -- | -- | -- | --
+
+Esto permite conocer el número de parámetros que recibe la función, un puntero a su codigo fuente mediante su label en *assembly*, el número de variables libres a guardar, y finalmente los valores de tales identificadores libres.
+
+La creación de la clausura de una función se presenta casi en su totalidad en `compile.ml: compile_closure`, donde se ve que el proceso es similar a lo siguiente:
+```
+mov   [R15], <N° Params>
+mov   [R15 + 8], <Label>
+mov   [R15 + 16], <N° Free Ids>
+mov   [R15 + 24], <Free Id #1>          ;; Solo si aplica
+...
+mov   [R15 + (16+8k)], <Free Id #k>     ;; Solo si aplica
+```
+Tras crear la clausura, esta se guarda en un registro a conveniencia y se le añade un tag identificador para clausuras `111`. Podemos recordar los tags en la siguiente tabla:
 
 | Tipo de dato | Tag |
 | ------------ | --- |
 | Entero (int) | `__0` |
 | Booleano     | `001` |
 | Tupla        | `011` |
+| Record       | `101` |
+| **Clausura** | `111` |
 
-Nótese que cualquier valor que termine en `0` se considera un entero, lo que permite mantener el tamaño de ese tipo de dato en 63 bits.
+Adicionalmente, se hace un análogo a los métodos Python, donde se pasa una referencia a *self* como primer argumento implícito. En este caso, el primer argumento de cada llamada a función (sea λ o definida) será la misma clausura, permitiendo una recursión sencilla en el caso de las funciones definidas con `def`, ya que el nombre de la función corresponde a su label en *assembly*. En contraparte, funciones lambdas no tienen esta facilidad, ya que el interior de una función no sabe cómo fue llamada por fuera.
 
-#### HEAP
-Se habló de utilizar el *heap* para guardar los valores de las tuplas, pero no de cómo acceder a esta porción de memoria. Antes de instanciar el programa principal de nuestro lenguaje, se realiza una petición de memoria con `calloc`, la cual es traspasada como parámetro a través del registro **RDI**, que recordemos corresponde al primer argumento según la *calling-convention* x64. Luego, este puntero al inicio del *heap* es guardado en el registro **R15**, utilizado desde ahora como un *heap pointer*.
+#### Free Ids
+Como se mencionó previamente, una función anónima podría necesitar capturar los identificadores asociados a algún valor al momento de su definición. Se vio que estas son guardadas en la clausura misma, por lo que al momento de aplicación es posible acceder a ellas mediante **[RDI + (2+8*i*)]**. Sin embargo esto complica un poco el *lookup* de ids, ya que estas podrían estar en Stack (como había sido hasta ahora), o en la clausura presente como primer argumento recibid. Sin mencionar que en el código principal RDI no contiene ninguna clausura.
 
-#### Constructor de tuplas
-Para construir una tupla del estilo:
+Para normalizar la búsqueda, antes de compilar el body de una función, se hace un paso de **RDI** al *Stack* de todos los valores de identificadores libres capturados, facilitando la búsqueda y acceso durante la ejecución del programa. Por ejemplo, la función `add5`, posee como variable libre a `n`:
 ```
-(tup <v1> <v2> ... <vn>)
+(let (n 5)
+    (let (add5 (λ (x) (+ x n)))
+        (add5 3)))
 ```
-Primero se compila el valor de `v1` ... `vn`, moviendo al *stack* los valores obtenidos. Es decir, si por simplicidad asumimos que no hemos guardado ninguna variable local aún, `v1` se encontrará en **[RBP-8]**, `v2` en **[RBP-16]**, y para un *i* arbitrario, `vi` se encontrará en **[RBP-8\*i]**. Una vez compilados todos los valores de la tupla, se procede a moverlos al heap, guardando primero el tamaño de la tupla en **[R15]**, y luego su contenido, donde en general, `vi` queda guardado en **[R15+8\*i]**.
-
-Tras lo anterior, se guarda el puntero al inicio de la tupla en el registro de retorno **RAX**, y se actualiza **R15** para poder ofrecer un espacio libre en el *heap* nuevamente. Para ello se desplaza en *8\*(n + 1)* posiciones, añadiendo 8 adicionales si no queda alineada a una dirección múltiplo de 16.
-
-Todo esto es realizado por la función ``compile_tuple``, la cual releva a `compile_expr` en el proceso de compilación de tuplas. Esta también se apoya de `comp_tuple_elems` responsable de compilar los valores de las tuplas y dejarlas guardadas en *stack*. Además de `assign_tuple_values`, función encargada de asignar los valores desde *stack* a la tupla generada.
-
-#### Get
-Los *getters* de las tuplas poseen la siguiente estructura:
+Por lo que posterior al llamado de `add5`, en su stack frame ocurre lo siguiente:
 ```
-(get <tuple> <position>)
+push RBP                      // Calling Convention
+mov  RBP, RSP                 // Calling Convention        
+sub  RSP, 0x10                // Space in Stack (16 bytes)
+sub  RDI, 0x7                 // Untag the Closure in RDI
+mov  R11, qword[RDI + 24]     // Get n from closure
+mov  qword[RBP - 8], R11      // Save n in Stack
+add  RDI, 0x7                 // Tag the Closure in RDI
 ```
-Donde `<tuple>` corresponde a una expresión que represente una tupla y `<position>` un índice válido dentro de la tupla. Antes de realizar el acceso, existen verificaciones que impiden un uso malicioso del programa. La posición debe ser un número válido, positivo y menor al largo de la tupla. Por otro lado, la primera expresión debe ser una tupla. Estas verificaciones son posibles gracias al sistema de `tagging` mencionado previamente, y tal tarea se encuentra delegada a las funciones `type_checking` y `check_index`.
-
-Una vez que se verificó la coherencia de la expresión, se procede a eliminar el tag de la tupla para poder acceder a sus valores. Se suma 2 al índice considerando la representación entera y que los index comienzan de 0 externamente y desde 1 internamente, luego se hace un *shift* aritmético a la derecha del index, a fin de obtener el índice real *i* a consultar.
-
-Finalmente, considerando que la tupla está guardada en **RAX**, se obtiene su *i*-ésimo valor, ubicado en **[RAX + 8\**i*]**. Sin embargo, *i* se encuentra en el registro auxiliar **R11**, por lo tanto, como los desfases se encuentran implementados sólo con constantes, se realiza lo siguiente:
-```
-imul  R11, 8
-add   RAX, R11
-mov   RAX, [RAX] 
-```
-Quedando el resultado en **RAX**.
-
-La función encargadas de la compilación de *getters* es ``compile_get``.
-
-### Mutación de tuplas
-La mutación se aplica de una forma similar a los *getters*:
-```
-(set <tuple> <position> <value>)
-```
-La función `compile_set` se encarga de compilar `<value>`, guardarlo en *stack*, compilar `<position>` y `<tuple>` (realizando las mismas verificaciones de tipo que con `get`) y finalmente asignar el valor en la tupla. Para esto, nuevamente es necesario eliminar el tag, aplicar el desfase deseado sumando el índice, transferir el valor, y luego eliminar el desfase y aplicar el tagging nuevamente:
-```
-sub   RAX, 3          ;; elimina el tagging
-imul  R11, 8          ;; 8*i
-add   RAX, R11        ;; Aplica el desfase a <position>
-mov   [RAX], <value>  ;; Guarda el valor
-sub   RAX, R11        ;; Vuelve al inicio de la tupla
-add   RAX, 3          ;; restaura el tagging
-```
-
-### Records
-En términos de su representación, los records son muy similares a las tuplas. La principal diferencia es el tag: `101` para records en vez de `011` para tuplas. La segunda diferencia es que el entero de 64 bits con que comienza un record en el heap no sólo indica su tamaño, sino además su tipo, de modo que los primeros 32 bits del valor son un tag generado en tiempo de compilación, y los últimos 32 son el tamaño de la estructura.
-
-Las operaciones sobre records, por otra parte, si son distintas. El constructor, las funciones de proyección (`id-campo`) y el _type-checker_ (`id?`) son funciones, no operadores. Es decir, se llaman con `call` e intentar definir otra función con el mismo nombre causa un error de compilación. A diferencia de las funciones definidas por el usuario, estas no se compilan a partir de una expresión, sino que el código _assembler_ se genera directamente, se le añade una etiqueta para poder invocarlo con `call`, y dicha etiqueta se añade al ambiente de compilación del programa junto con su aridad.
-
-#### Constructor
-El procedimiento es básicamente idéntico a la creación de una tupla. La única diferencia es el tag.
-
-#### Getter
-Muy similar al `get` para tuplas, con la diferencia de que cada función accede a un elemento específico. Por ejemplo, si `field` es el `n`-ésimo campo de un _record_ de nombre `id`, entonces `(id-field t)` es análogo a `(get n t)`. Sin embargo, no se puede usar exactamente el mismo código porque, por un lado, `get` corrobora la validez del índice, que en este caso es innecesario, y por el otro `id-field` necesita, además de verificar que el valor recibido sea un puntero a un record, asegurarse de que los valores en el heap corresponden efectivamente a una estructura de tipo `id`. En consecuencia, en vez de comparar el índice contra el tamaño de la tupla, `id-field` compara el primer elemento del record contra el tag (conocido al momento de compilar la función) y levanta un error de tipo si no coinciden.
-
-#### _typechecker_
-El verificador de tipo (`id?`) primero comprueba que el valor recibido sea un puntero a un record, y retorna `false` si no lo es. Si es un puntero válido, entonces lee el primer elemento y lo compara contra el tag asociado a `id`; si son distintos retorna `false` y si son iguales, `true`.
-
-### Pattern-matching de tuplas
-Considerando que ahora se cuenta con un `let` múltiple y con `getters` para tuplas, es posible introducir el *pattern-matching*:
-```
-(let ((tup <id1> <id2> ... <idn>) <tuple>)
-          <body>)
-```
-como un azúcar sintáctico de:
-```
-(let ((<id1> (get <tuple> 0))
-      (<id2> (get <tuple> 1))
-      ... 
-      (<idn> (get <tuple> n-1)))
-          <body>)
-```
-el cual puede ser resuelto en el parser.
-
-## Otros cambios
-- `print` ahora se incluye por defecto en el ambiente de compilación del lenguaje. Esto significa que ya no es necesario definirla con `defsys` para poder usarla en un programa.
-- En los llamados a funciones, el valor de cada argumento se compila y se guarda en *stack* antes de ser movido a los parámetros de la convención de llamada. Esto protege la sobreescritura cuando se realiza una composición de llamados.
-- Se crea un generador de `gensym`s.
-- Se modulariza la función `compile_expr`, mejorando la legibilidad del código.
-- Se estandarizan los errores.
-- Se introducen comentarios en el assembly.
-- Se añade una conversión de tipos antes y después de un llamado a función externa de C, a fin de asegurar la usabiidad por ambos lados.
-- Parser admite diferentes tipos de expresiones `let`.
-- Se añade una función `len` para obtener el largo de una tupla de manera sencilla.
+Se es consciente de que la decisión anterior puede hacer que los programas hagan un uso mas intensivo de la pila de ejecución, pero pareció más acertado.
 
 ## Tests
 La carpeta `tests` contiene tests variados para el compilador. En específico, para esta entrega se desarrollan casos de prueba en:
-- `tests/functions`: Arreglo en convención de llamada y funciones en C sobre tuplas.
-- `tests/tuples`: Tuplas, getters y setters.
-- `tests/records`: Records.
+- `tests/functions/first_class`: Implementación de First Class
+
+Los tests requeridos:
+
+*a)* Disponible en `fundefs_05.test`
+```
+(def (mapPair f p) (tup (f (get p 0)) (f (get p 1))))
+
+(let (add3 (λ (x) (+ 3 x)))
+  (mapPair add3 (tup 39 2)))
+```
+*b)* Disponible en `lambda_05.test`
+```
+(def (fib n) 
+    (if (= n 0) 
+        0
+        (if (= n 1)
+            1
+            (+ (fib (- n 1)) (fib (- n 2))))))
+
+(def (pair_fun f g p) 
+    (tup (f (get p 0)) 
+         (g (get p 1))))
+    
+(pair_fun (λ (x) (+ 3 x))
+          (λ (y) (pair_fun fib (λ (z) (* z y)) (tup y y)))
+          (tup 39 2))
+```

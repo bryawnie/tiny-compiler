@@ -1,0 +1,7 @@
+NAME: (SET) Index out of bounds
+DESCRIPTION: SET BAD tests
+STATUS: RT error
+SRC:
+(set (tup 1 2 3 4 5) 5 8)
+EXPECTED:
+Index out of bounds 5
