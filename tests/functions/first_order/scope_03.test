@@ -1,0 +1,7 @@
+NAME: Left to Right evaluation
+DESCRIPTION: check the flows of evaluation
+STATUS: CT error
+SRC:
+(+ (+ a b) c)
+EXPECTED:
+Unbound identifier: a

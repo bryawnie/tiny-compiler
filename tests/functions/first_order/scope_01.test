@@ -3,7 +3,7 @@ DESCRIPTION: check that functions have correct scoping
 STATUS: CT error
 SRC:
 (def (sum3 x y z)
-  (+ (+ a b) y))
+  (+ (+ a b) c))
 
 (sum3 3 4 5)
 EXPECTED:
