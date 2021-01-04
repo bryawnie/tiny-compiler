@@ -241,7 +241,9 @@ let rec concat_let_env (env1: let_env) (env2: let_env) : let_env =
 
 (* builds a let env that allows access to closure bound args.
   We assume that closure bound ids always precede let bound ones, and follow
-  function arguments. *)
+  function arguments.
+    Closure offsets are assigned in the order the free ids are in the list.
+  *)
   let rec enclose_lenv (fids: string list) (outer_env: let_env) : let_env =
   match fids with
   | [] -> outer_env
