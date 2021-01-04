@@ -44,6 +44,7 @@ type expr =
   | UnOp of unOp * expr
   | BinOp of binOp * expr * expr
   | Let of (string * expr) list * expr
+  | LetRec of (string * expr) list * expr
   | If  of expr * expr * expr
   | Fun of (string list) * expr
   | App of expr * expr list   (* first class function application *)
@@ -125,6 +126,7 @@ let rec pp_expr fmt =
   | UnOp (op, e)        -> pf fmt "(%a %a)" pp_unop op pp_expr e
   | BinOp (op, x1, x2)  -> pf fmt "(%a %a %a)" pp_binop op pp_expr x1 pp_expr x2
   | Let (defs,b)         -> pf fmt "(let (%a) %a)" (pp_defs pp_expr) defs pp_expr b
+  | LetRec (defs, b)    -> pf fmt "(letrec (%a) %a)" (pp_defs pp_expr) defs pp_expr b
   | If (c, t, f)        -> pf fmt "(if %a %a %a)" pp_expr c pp_expr t pp_expr f
   | Fun (ids, body)     -> pf fmt "(λ (%a) %a)" (pp_expr_list pp_id) ids pp_expr body
   | App (fname, exprs)  -> pf fmt "(%a %a)" pp_expr fname (pp_expr_list pp_expr) exprs

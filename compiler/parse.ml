@@ -105,6 +105,12 @@ let rec parse_expr (sexp : sexp) : expr =
     Let ([(id, parse_expr e)], parse_expr body)
   | `List [`Atom "let" ; `List defs; body] -> (* Multiple Let *)
     Let ((parse_defs parse_expr) defs, parse_expr body)
+  (* Single letrec *)
+  | `List [`Atom "letrec" ; `List [`Atom id ; e] ; body] ->
+    LetRec ([(id, parse_expr e)], parse_expr body)
+  (* multi letrec *)
+  | `List [`Atom "letrec" ; `List bindings ; body] ->
+    LetRec ((parse_defs parse_expr) bindings, parse_expr body)
   | `List [`Atom "if" ; c; t; f] -> 
     If (parse_expr c, parse_expr t, parse_expr f)
   | `List [`Atom "λ" ; `List ids; body] -> 
