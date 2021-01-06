@@ -377,6 +377,26 @@ let interp_tests =
     (* test_case "Prog" `Slow test_interp_prog; *)
   ]
 
+let compiler_tests =
+  
+  let test_free_ids () = 
+    let output : string list testable =
+      testable (Fmt.list Fmt.string) (=)
+    in
+    
+    check output "(+ (+ a b) c)"
+    ["a" ; "b" ; "c"]
+    (free_ids (BinOp (Add, BinOp (Add, Id "a", Id "b"), Id "c")) []) ;
+
+    check output "(let (x 1) (* (+ x y) y))"
+    ["y"]
+    (free_ids (Let ([("x", Num 1L)], BinOp(Mul, BinOp (Add, Id "x", Id "y"), Id "y"))) [])
+  in
+
+  "compile",
+  [ test_case "Free ids" `Quick test_free_ids]
+
+
 let interpreter (src : string) : string =
   let open Interp in
   let e = Parse.(parse_expr (sexp_from_string src)) in
@@ -388,7 +408,7 @@ let interpreter (src : string) : string =
  * See the documentation at https://github.com/mirage/alcotest *)
 let () =
   run "Compiler" @@
-    [ parse_tests ; interp_tests ]
+    [ parse_tests ; interp_tests ; compiler_tests ]
     @ Bbctester__Test.tests_from_dir 
         ~runtime:"compiler/rtsys.c" 
         ~compiler:compile_src 
