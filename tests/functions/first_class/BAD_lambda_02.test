@@ -1,0 +1,7 @@
+NAME: Arity missmatch
+STATUS: RT error
+SRC:
+(let (sum (λ (x y) (+ x y)))
+    (sum 2))
+
+EXPECTED: Arity mismatch: function expects 2 arguments

@@ -1,0 +1,11 @@
+NAME: Application of a not-fun
+STATUS: RT error
+SRC:
+
+(def (applyToFive it)
+    (it 5))
+
+(let (n 5)
+    (applyToFive n))
+
+EXPECTED: Expected a function, got 5
