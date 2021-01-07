@@ -103,35 +103,33 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   Free ids
   Another way to determine unbound identifiers in an expression.
 *)
-let rec free_ids (e: expr) (env: let_env) : string list =
-  let map elist =
-    List.concat_map (fun e -> free_ids e env) elist
+let rec free_ids (e: expr) (bound_ids: string list) : string list =
+  let map = 
+    let rec recmap bids elist =
+      match elist with
+      | [] -> []
+      | hd::tl -> 
+        let ids = free_ids hd bids in
+        ids @ recmap (ids @ bids) tl
+    in
+    recmap bound_ids
   in
   match e with
   | Num _ -> []
   | Bool _ -> []
-  | Id id -> if List.mem_assoc id env then [] else [id]
-  | UnOp (_, x) -> free_ids x env
-  | BinOp (_, x, y) -> free_ids x env @ free_ids y env
+  | Id id -> if List.mem id bound_ids then [] else [id]
+  | UnOp (_, x) -> free_ids x bound_ids
+  | BinOp (_, x, y) -> map [x ; y]
   | Let (bindings, e) ->
-    let (new_env, _), _ =
-      let ids, _ = List.split bindings in
-      multi_extend_env ids (env, empty_sys_env)
-    in
-    free_ids e new_env
-  | If (condition, then_expr, else_expr) -> 
-    free_ids condition env @
-    free_ids then_expr env @
-    free_ids else_expr env
-  | Fun (params, body) -> 
-    let (arg_lenv, _), _ = multi_extend_env params (env, empty_sys_env) in
-    free_ids body arg_lenv
-  | App (f, args) -> free_ids f env @ map args
+    let ids, _ = List.split bindings in free_ids e (ids @ bound_ids)
+  | If (c, t, e) -> map [c ; t ; e]
+  | Fun (params, body) -> free_ids body (params @ bound_ids)
+  | App (f, args) -> map (f::args)
   | Sys (_, args) -> map args
   | Tuple elems -> map elems
-  | Get (t, i) -> free_ids t env @ free_ids i env
-  | Set (t, i, e) -> free_ids t env @ free_ids i env @ free_ids e env
-  | Length t -> free_ids t env
+  | Get (t, i) -> map [t ; i]
+  | Set (t, i, e) -> map [t ; i ; e]
+  | Length t -> free_ids t bound_ids
   | Void -> []
 
 
@@ -149,31 +147,31 @@ let rec free_ids (e: expr) (env: let_env) : string list =
     [+(16 + 8*k)] free id k
  *)
 let compile_closure (label: string) (arity: int64) (free_vars: string list)
-(lenv: let_env) : instruction list =
+(outer_env: let_env) : instruction list =
   let size = 3 + List.length free_vars in
   let num_fv = Int64.of_int (List.length free_vars) in 
-  let rec bind_free_ids (ids: string list) =
-    match ids with 
-    | [] -> [] 
-    | hd::tl ->
-      [ IMov (Reg aux_reg, let_lookup hd (lenv,[]));
-        IMov (
-          RegOffset (heap_reg, 3 + (List.length free_vars - List.length ids)), 
-          Reg aux_reg)]
-      @ bind_free_ids tl
+
+  (* stores free ids in the closure *)
+  let bind_free_ids (ids : string list) =
+    let instructions offset id = 
+      [IComment ("Enclosing "^id) ;
+      IMov (Reg aux_reg, let_lookup id (outer_env, [])) ;
+      IMov (RegOffset (heap_reg, 3 + offset), Reg aux_reg)]
+    in
+    List.concat @@ List.mapi instructions ids
   in
-  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity))    (* arity *)
-  ; IMov (RegOffset (heap_reg, 1), Label label)                 (* code pointer *)
-  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]               (* free var count*)
-  @ bind_free_ids free_vars @                       (* store values of enclosed ids *)
-  [ IMov (Reg ret_reg, Reg heap_reg)                (* obtain closure pointer *)
-  ; IAdd (Reg ret_reg, function_tag)]               (* tag pointer *)
+
+  [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity)) (* arity *)
+  ; IMov (RegOffset (heap_reg, 1), Label label)       (* code pointer *)
+  ; IMov (RegOffset (heap_reg, 2), Const num_fv)]    (* free var count*)
+  @ bind_free_ids free_vars @         (* store values of enclosed ids *)
+  [ IMov (Reg ret_reg, Reg heap_reg)        (* obtain closure pointer *)
+  ; IAdd (Reg ret_reg, function_tag)]                  (* tag pointer *)
+  (* update heap ptr *)
   @ if (size mod 2 = 0) then
-    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]         (* update heap ptr *)
+    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]
   else 
-    [IAdd (Reg heap_reg, Const (Int64.of_int ((size + 1) * 8)))]  (* update heap ptr *)
-
-
+    [IAdd (Reg heap_reg, Const (Int64.of_int ((size + 1) * 8)))]
 
 
 (* -----------------------------------
@@ -647,7 +645,9 @@ let compile_fundef (fname: string) (params: string list) (body: expr)
   let lenv, senv = env in
   let flbl = get_fun_label fname in
   let argenv = let_env_from_params (fname::params) empty_env in
-  let fids = remove_repeated @@ free_ids body argenv in
+  let fids = 
+    let bound_ids, _ = List.split argenv in free_ids body bound_ids 
+  in
   let closed_lenv = enclose_lenv fids argenv in
   [IJmp (Label ("end_function_"^flbl)) ;IEmpty;
    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
@@ -657,10 +657,10 @@ let compile_fundef (fname: string) (params: string list) (body: expr)
   @ callee_prologue 
   @ [ISub (Reg RSP, Const stack_offset) (* allocate stack space *)
   ; IMov (Reg closure_reg, Reg RDI) (* closure is in first arg *)
-  ; ISub (Reg closure_reg, function_tag) (* untag closure *)]
+  ; ISub (Reg closure_reg, function_tag)] (* untag closure *)
   @ compile_expr body (closed_lenv, senv)
   @ callee_epilogue 
-  @ [IRet; ILabel ("end_function_"^flbl) ; IEmpty]
+  @ [IRet ; ILabel ("end_function_"^flbl) ; IEmpty]
   @ compile_closure flbl (Int64.of_int @@ List.length params) fids lenv
 
 (* Compiles constructor, getter, setter and type-checker for a record *)

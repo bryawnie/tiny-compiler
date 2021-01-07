@@ -35,7 +35,7 @@ const val VAL_FALSE = TAG_BOOL;
 /* the first element of a record contains two numbers: the 32 least
   significant bits represent its size, and the most significant 32 bits
   are a type tag to differentiate amongst different records. */
-#define GET_RECORD_SIZE(v) (*VAL_TO_PTR(v) & RECORD_SIZE_BITMASK)
+#define GET_RECORD_SIZE(v) ((*VAL_TO_PTR(v)) & RECORD_SIZE_BITMASK)
 #define GET_RECORD_TYPE(v) (*VAL_TO_PTR(v) & ~RECORD_SIZE_BITMASK) >> 32
 #define RECORD_TO_ARRAY(v) (VAL_TO_PTR(v) + 1)
 #define CLOSURE_ARITY(v) (*VAL_TO_PTR(v) >> 1)
@@ -79,7 +79,7 @@ dtype typeofval(val v) {
 }
 
 /* applies charcount to an array of values */
-int arr_charcount(val *v, int size);
+int arr_charcount(val *a, int size);
 
 /* Counts the maximum amount of characters required to print a value. */
 int charcount(val v) {
@@ -95,10 +95,10 @@ int charcount(val v) {
       return 5;
 
     case TYPE_TUPLE:
-      return 2 + arr_charcount(VAL_TO_PTR(v) + 1, *VAL_TO_PTR(v));
+      return 5 + arr_charcount(TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v));
 
     case TYPE_RECORD:
-      return 2 + arr_charcount(VAL_TO_PTR(v) + 1, GET_RECORD_SIZE(v));
+      return 2 + arr_charcount(RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v));
 
     default:
       return 40;
@@ -131,15 +131,14 @@ int sprintval(char *str, val v) {
     case TYPE_BOOL:
       switch (v) {
         case VAL_TRUE:
-          aux = STR_TRUE;
+          return sprintf(str, "%s", STR_TRUE);
         break;
         case VAL_FALSE:
-          aux = STR_FALSE;
+          return sprintf(str, "%s", STR_FALSE);
         break;
         default:
-          return sprintf(str, "Unknown value: %#018lx", v);
+          goto unknown;
       }
-      return sprintf(str, "%s", aux);
 
     case TYPE_TUPLE:
       if (GET_TUPLE_SIZE(v) == 0)
@@ -152,10 +151,11 @@ int sprintval(char *str, val v) {
       return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
 
     case TYPE_CLOSURE:
-      return sprintf(str, "<Function at %#.16lx with arity %d>",
+      return sprintf(str, "<Function at %#.16lx with arity %ld>",
         CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
 
     default:
+    unknown:
       return sprintf(str, "Unknown value: %#018lx", v);
   }
 }
@@ -167,71 +167,56 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
    */
 
   char *s = str;
-  s = s + sprintf(s, "%s", pre);
+  s += sprintf(s, "%s", pre);
   for (int i = 0; i < size; i++) {
-    s = s + sprintval(s, a[i]);
+    s += sprintval(s, a[i]);
     if (i + 1 < size) *s++ = ' ';
       
   }
-  s = s + sprintf(s, "%s", post);
+  s += sprintf(s, "%s", post);
   return s - str;
 }
 
-char *val_to_str(val v) {
-  
-  // fprintf(stderr, "val_to_str: %ld\n", v);
-  
-  int str_size = charcount(v);
-  char *str = malloc(str_size);
-  sprintval(str, v);
-
-  return str;
-}
-
 void error(int errCode, val v) {
-
-  /* this is a quick fix for a mysterious segfault */
-  if (errCode == ERR_RECORD_TYPE) {
-    fprintf(stderr, "Got record with incorrect type!\n");
-    exit(errCode);
-  }
-  
-  char *str = val_to_str(v);
-  int_v int_value = (int_v) v;
+  const char *format;
 
   switch (errCode){
   case ERR_NOT_NUMBER:
-    fprintf(stderr, "Expected number, but got %s\n", str);
+    format = "Expected number, but got %s\n";
     break;
   case ERR_NOT_BOOLEAN:
-    fprintf(stderr, "Expected boolean, but got %s\n", str);
+    format =  "Expected boolean, but got %s\n";
     break;
   case ERR_NOT_TUPLE:
-    fprintf(stderr, "Expected tuple, but got %s\n", str);
+    format = "Expected tuple, but got %s\n";
     break;
   case ERR_NEG_INDEX:
-    fprintf(stderr, "Unexpected negative index %ld\n", int_value  >> 1);
+    format = "Unexpected negative index %s\n";
     break;
   case ERR_INDEX_OVERFLOW:
-    fprintf(stderr, "Index out of bounds %ld\n", (int_value >> 1) );
+    format = "Index out of bounds %s\n";
     break;
   case ERR_NOT_RECORD:
-    fprintf(stderr, "Expected record, but got %s\n", str);
+    format = "Expected record, but got %s\n";
     break;
   case ERR_RECORD_TYPE:
-    fprintf(stderr, "Got record with incorrect type: %s\n", str);
+    format = "Got record with incorrect type: %s\n";
     break;
   case ERR_ARITY_MISMATCH:
-    fprintf(stderr, "Arity mismatch: function expects %ld arguments\n", int_value >> 1);
+    format = "Arity mismatch: function expects %s arguments\n";
     break;
   case ERR_NOT_CLOSURE:
-    fprintf(stderr, "Expected a function, got %s\n", str);
+    format = "Expected a function, got %s\n";
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);
+    exit(errCode);
     break;
   }
 
+  char *str = malloc(charcount(v));
+  sprintval(str, v);
+  fprintf(stderr, format, str);
   free(str);
 
   exit(errCode);
@@ -298,10 +283,19 @@ val first_tup(int_v *a){
 /* MAIN */
 int main(int argc, char** argv) {
   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
+
+  if (!HEAP){
+    fprintf(stderr, "Heap space allocation failed");
+    exit(-1);
+  }
+
   val result = our_code_starts_here(HEAP);
-  char *result_str = val_to_str(result);
-  printf(result_str);
-  free(result_str);
+
+  char *str = malloc(charcount(result));
+  sprintval(str, result);
+  printf("%s\n", str);
+  free(str);
+
   free(HEAP);
   return 0;
 }

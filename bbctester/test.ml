@@ -114,7 +114,7 @@ let wrap_result (out, err, retcode) =
   if retcode = 0 then Ok () else Error (CTError, out ^ err)
 
 let clang runtime basefile =
-  wrap_result @@ CCUnix.call "clang -o %s.run %s %s.o" basefile runtime basefile
+  wrap_result @@ CCUnix.call "clang -no-pie -o %s.run %s %s.o" basefile runtime basefile
 
 let nasm basefile =
   wrap_result @@ CCUnix.call "nasm -f %s -o %s.o %s.s" bin_format basefile basefile

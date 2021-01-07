@@ -1,0 +1,7 @@
+NAME: Application of a not-lambda
+STATUS: RT error
+SRC:
+(let (t (tup 1 2 3))
+    (t 2))
+
+EXPECTED: Expected a function, got (tup 1 2 3)
