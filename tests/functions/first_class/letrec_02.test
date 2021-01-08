@@ -1,0 +1,6 @@
+NAME: simple λ recursion
+SRC:
+(letrec (factorial (λ (n) (if (< n 1) 1 (* n (factorial (- n 1))))))
+    (factorial 5))
+
+EXPECTED: 120

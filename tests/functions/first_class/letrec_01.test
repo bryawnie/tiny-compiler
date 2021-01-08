@@ -1,0 +1,9 @@
+NAME: ejemplo del enunciado  
+SRC:
+(letrec ((even (λ (n) (or (= n 0) (odd (- n 1)))))
+         (odd (λ (n) (or (= n 1) (even (- n 1))))))
+   (let ((collatz-aux (λ (n) (if (even n) (/ n 2) (+ 1 (* 3 n))))))
+      (letrec (collatz (λ (n) (collatz-aux n)))
+         (collatz 42)))
+)
+EXPECTED: 21
