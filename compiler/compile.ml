@@ -35,7 +35,10 @@ let rec varcount (e:expr): int =
   | Id _ -> 0
   | UnOp (_, sub_ex) -> varcount sub_ex
   | BinOp (_, l_ex, r_ex) -> 1 + max (varcount l_ex) (varcount r_ex)
-  | Let (defs, body_ex) -> 1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
+  | Let (defs, body_ex) ->
+    1 + max (List.fold_left max 0 (List.map (fun (_,y)-> varcount y) defs)) (varcount body_ex)
+  | LetRec (ds, b) ->
+    1 + max (List.fold_left max 0 (List.map (fun (_,y) -> varcount y) ds)) (varcount b)
   | If (_, t_ex, f_ex) -> max (varcount t_ex) (varcount f_ex)
   | Fun (_, _) -> 2
   | App (_, args_ex) -> List.fold_left max 0 (List.map varcount args_ex) + List.length args_ex + 2
@@ -88,6 +91,7 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   | UnOp (_, e)  -> free_vars e saved
   | Id x    ->  if List.mem x saved then [] else [x]
   | Let (vals,b) -> free_vars b (saved @ (List.map (fun (x,_) -> x) vals))
+  | LetRec (ids, b) -> free_vars b (saved @ (List.map (fun (x,_) -> x) ids))
   | BinOp (_, l, r) -> free_vars l saved @ free_vars r saved
   | If (c, t, f) -> free_vars c saved @ free_vars t saved @ free_vars f saved
   | Fun (ids, body) -> free_vars body (saved @ ids)
@@ -121,6 +125,8 @@ let rec free_ids (e: expr) (bound_ids: string list) : string list =
   | UnOp (_, x) -> free_ids x bound_ids
   | BinOp (_, x, y) -> map [x ; y]
   | Let (bindings, e) ->
+    let ids, _ = List.split bindings in free_ids e (ids @ bound_ids)
+  | LetRec (bindings, e) ->
     let ids, _ = List.split bindings in free_ids e (ids @ bound_ids)
   | If (c, t, e) -> map [c ; t ; e]
   | Fun (params, body) -> free_ids body (params @ bound_ids)
@@ -168,10 +174,7 @@ let compile_closure (label: string) (arity: int64) (free_vars: string list)
   [ IMov (Reg ret_reg, Reg heap_reg)        (* obtain closure pointer *)
   ; IAdd (Reg ret_reg, function_tag)]                  (* tag pointer *)
   (* update heap ptr *)
-  @ if (size mod 2 = 0) then
-    [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]
-  else 
-    [IAdd (Reg heap_reg, Const (Int64.of_int ((size + 1) * 8)))]
+  @ [IAdd (Reg heap_reg, Const (Int64.of_int(size * 8)))]
 
 
 (* -----------------------------------
@@ -573,6 +576,110 @@ let compile_lambda (ids: string list) (body: expr) (env: env)
   @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
   @ closure_definition
 
+(* recursive lambda. it can reference itself with the proper id *)
+let compile_reclambda (id: string) (params: string list) (body: expr) (env: env) 
+(compile_expr: expr -> env -> instruction list) : instruction list = 
+  (* CLOSURE CREATION *)
+  let arity = (Int64.of_int (List.length params)) in  (* Arity of function *)
+  let label = gensym @@ "lambda"^id in  (* Label of function *)
+  let free  = remove_repeated @@ free_vars body (id::params) in  (* Free Ids *)
+  let (lenv, senv) = env in  (* Split lenv and senv *)
+  let closure_definition =
+    [IComment (label^" Closure")] 
+    @ compile_closure label arity free lenv @
+    [IComment "end Closure" ; IEmpty ]   
+  (* Now the closure is in RAX *)
+  in
+  (* BODY COMPILATION *)
+  let new_lenv = let_env_from_params (id::params) empty_env in (* parameters *)
+  (* 
+    ADD FREE VARS TO STACK
+    Bounds to stack the references of free ids contained in
+    the closure, to bring access by the regular way.
+    Returns the instruction list and the environment with lodaded ids.
+  *)
+  let rec add_freevars_stack (fv: string list) (env: env): instruction list * env =
+    let nro_arg = List.length free - List.length fv in
+    match fv with
+    | [] -> [], env
+    | id::ids -> 
+      let new_env, slot = extend_env id env in
+      let instrs, ret_env = add_freevars_stack ids new_env in
+      ([IMov (Reg aux_reg, RegOffset (RDI, 3 + nro_arg));
+        IMov (slot, Reg aux_reg)] 
+      @ instrs, ret_env)
+  in
+  (* Adding free vars into stack *)
+  let add_fv, fun_env   = add_freevars_stack free (new_lenv, senv) in
+  let stack_offset = Int64.of_int (stack_offset_for_local body) in  (* Stack Offset needed *)
+  [
+    IJmp (Label ("end_of_"^label));
+    IEmpty;
+    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+    IComment ("==> REC LAMBDA: "^label);
+    IComment ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;";
+    ILabel label
+  ] 
+  @ callee_prologue 
+  @ [ISub (Reg RSP, Const stack_offset)]  (* Offset for defining locals*)
+  @ [ISub (Reg RDI, function_tag)]        (* Untagging Closure*)
+  @ add_fv                                (* Free vars into stack *)
+  @ [IAdd (Reg RDI, function_tag)]        (* Tagging again *)
+  @ compile_expr body fun_env             (* Compiling Body *)
+  @ callee_epilogue 
+  @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
+  @ closure_definition
+
+
+(* compiles a recursive let binding *)
+let compile_letrec (compiler: expr->env->instruction list) (env:env) 
+  (bindings: (string * expr) list) : instruction list * env =
+
+  (* this preallocates the heap space closures will occupy *)
+  let rec preallocate env bindings :
+   instruction list * env * (string * (string list) * expr) list =
+    match bindings with
+    | [] -> [], env, []
+    | (id, expr)::tl ->
+      begin
+        match expr with
+        | Fun (params, fbody) -> 
+          let new_env, loc = extend_env id env in
+          let closure_size = 
+            Int64.of_int ((3 + List.length (free_ids fbody (id::params))) * 8) 
+          in
+          let instr_tl, final_env, binding_tl = preallocate new_env tl in
+          [IMov (Reg aux_reg, Reg ret_reg) ;
+           IAdd (Reg aux_reg, function_tag) ;
+           IMov (loc, Reg aux_reg) ;
+           IAdd (Reg ret_reg, Const closure_size)] 
+          @ instr_tl,
+          final_env,
+          ((id, params, fbody)::binding_tl)
+        | _ -> 
+          Fmt.failwith "letrec expects a lambda, but '%s' is bound to %a" id pp_expr expr
+      end
+  in
+
+  let preallocation, compilation_env, processed_bindings = 
+    preallocate env bindings 
+  in
+
+  let rec compile_lambdas (bindings: (string * (string list) * expr) list ) =
+    match bindings with
+    | [] -> []
+    | (id, params, body)::tl ->
+      (* heap space should have already been preallocated *)
+      compile_reclambda id params body compilation_env compiler
+      @ compile_lambdas tl 
+  in
+
+  [IPush (Reg ret_reg)
+  ;IMov (Reg ret_reg, Reg heap_reg)] @
+  preallocation @
+  [IPop (Reg ret_reg)] @
+  compile_lambdas processed_bindings,
+  compilation_env
 
 
 (*------------------------------------
@@ -601,6 +708,12 @@ let rec compile_expr (e : expr) (env: env) : instruction list =
       let compiled_vals, new_env    = compile_let_exprs compile_expr env vals in
       IComment "let-binding"::compiled_vals @ (compile_expr b new_env)
       @ [IComment "end let-binding"]
+  | LetRec (bindings, body) ->
+    let cexprs, new_env = compile_letrec compile_expr env bindings in
+    [IComment "letrec"] @ 
+    cexprs @
+    [IComment "end letrec"] @
+    (compile_expr body new_env)
   | BinOp (op, l, r) -> 
     IComment "BinOp application"::
     compile_binop op l r env compile_expr
