@@ -8,10 +8,8 @@ En esta entrega se añade una esperada *feature* para el lenguaje, **funciones d
 - [x] Funciones como valores de primera clase.
 - [x] Lambdas y clausuras.
 
-La característica adicional
-- [ ] Recursión.
-
-No fue implementada (yet).
+Así como para la característica adicional:
+- [x] Lambdas recursivas (`letrec`).
 
 ## Especificación
 ### Funciones como Valores
@@ -50,6 +48,13 @@ Al momento de definir funciones, en especial las lambdas, se hace necesario capt
         (addn 3)))
 ```
 El programa anterior debería entregar como resultado 8. Sin embargo, si el acceso a `n` dentro de la función se pierde, generaría un error. Por tanto, es necesario encapsular esto en clausuras. En particular, las funciones definidas con `def`, no requieren guardar ninguna variable libre ya que al momento de su definición, aun no se introduce ninguna variable en *scope*. Sin embargo, se opta por representarlas mediante clausuras igualmente, para mayor armonía entre funciones.
+
+### Lambdas recursivas
+La principal limitación de las lambdas, en comparación con las funciones con nombre, es que no pueden ser definidas recursivamente. Para incorporar esta funcionalidad se introduce la expresión `letrec` con la siguiente sintaxis:
+```
+(letrec ((<id> <expr>) ...) <expr>)
+```
+Su funcionamiento es análogo al de la expresión `let` tradicional, con la diferencia de que las expresiones a las que se asocian los identificadores sólo pueden ser lambdas, pues el lenguaje no soporta definiciones recursivas para otros tipos de valor.
 
 ## Implementación
 Tanto funciones definidas fuera del programa principal con `def`, como las funciones lambdas fueron implementadas mediante clausuras, por lo tanto, se tratará a ambas por igual desde este punto, con la única salvedad de que las funciones previamente definidas no requieren añadir variables libres a su scope, y que poseen un nombre definido, lo que simplifica su referencia al aplicar recursión.
@@ -102,6 +107,17 @@ mov  qword[RBP - 8], R11      // Save n in Stack
 add  RDI, 0x7                 // Tag the Closure in RDI
 ```
 Se es consciente de que la decisión anterior puede hacer que los programas hagan un uso mas intensivo de la pila de ejecución, pero pareció más acertado.
+
+#### `letrec`
+Para facilitar la implementación recursiva de una lambda no basta con compilarla en un ambiente en que su clausura esté ligada al identificador adecuado (que, de hecho, siempre se encuentra en `RDI`). En particular, compilar  una expresión `letrec` que contiene más de una función no es trivial. Para solucionar este problema, la compilación tiene las siguientes etapas:
+- Calcular el tamaño de todas las clausuras.
+- Asignar el espacio correspondiente en el heap y agregar al ambiente punteros a las clausuras (vacías) ligados al identificador apropiado.
+- Compilar el cuerpo de las funciones.
+- Completar los valores de las clausuras.
+
+Retrasar la captura de los valores libres hasta después de que se le haya asignado memoria a todas las clausuras permite tener disponible dentro del cuerpo de la lambda no sólo su propio identificador, sino además los otros identificadores en el `letrec`, para así poder definir funciones mutuamente recursivas.
+
+Salvo lo anteriormente descrito, una lambda recusiva se compila de forma análoga a una normal.
 
 ## Tests
 La carpeta `tests` contiene tests variados para el compilador. En específico, para esta entrega se desarrollan casos de prueba en:
