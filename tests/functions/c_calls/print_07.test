@@ -1,0 +1,9 @@
+NAME: Testing print (closures)
+DESCRIPTION: printing closures
+SRC:
+(let (sum (@sys print (λ (x y) (+ x y))))
+    (@sys print (sum 2 3)))
+EXPECTED:
+> <Function at 0x0000000000401d4b with arity 2>
+> 5
+5

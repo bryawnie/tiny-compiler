@@ -128,6 +128,74 @@ int arr_charcount(val *a, int size) {
   return count;
 }
 
+
+/* applies printval to an array of values */
+void arr_printval(val* a, int size, char* prefix, char* suffix);
+
+/* Prints a value by standard output */
+void printval(val v) {
+
+  /* fprintf(stderr, "sprintval: str=%p, v=%ld\n", str, v); */
+  
+  switch (typeofval(v)) {
+
+    case TYPE_INT:
+      printf("%ld", ((int_v) v) >> 1);
+      break;
+
+    case TYPE_BOOL:
+      switch (v) {
+        case VAL_TRUE:
+          printf("%s", STR_TRUE);
+          break;
+        case VAL_FALSE:
+          printf("%s", STR_FALSE);
+          break;
+        default:
+          printf("Unknown value: %#018lx", v);
+          break;
+      }
+      break;
+
+    case TYPE_TUPLE:
+      if (GET_TUPLE_SIZE(v) == 0)
+        printf("(tup)\n");
+      arr_printval(TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
+      break;
+
+    case TYPE_RECORD:
+      if (GET_RECORD_SIZE(v) == 0)
+        printf("{}\n");
+      arr_sprintval(RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
+      break;
+
+    case TYPE_CLOSURE:
+      printf("<Function at %#.16lx with arity %ld>",
+        CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
+      break;
+
+    default:
+      printf("Unknown value: %#018lx", v);
+      break;
+  }
+
+}
+
+void arr_printval(val *a, int size, char* pre, char* post) {
+  /* 
+  fprintf(stderr, "arr_sprintval: str=%p, a=%p, size=%d, pre='%s', post='%s'",
+    str, a, size, pre, post);
+   */
+  printf("%s", pre);
+  for (int i = 0; i < size; i++) {
+    printval(a[i]);
+    if (i + 1 < size) printf(" ");
+      
+  }
+  printf("%s", post);
+}
+
+
 /* applies sprintval to an array of values */
 int arr_sprintval(char *str, val* a, int size, char* prefix, char* suffix);
 
@@ -240,37 +308,9 @@ void error(val err, val v) {
 
 /* DEFAULT FOREIGN FUNCTIONS */
 val print(val v) {
-  // sprintf causes a segfault here :C
-  // char *str = val_to_str(v);
-  // printf("> %s\n", str);
-  // free(str);
-  char *str;
-  switch (typeofval(v)) {
-    case TYPE_INT:
-    printf("> %ld\n", ((int_v) v) >> 1);
-    break;
-
-    case TYPE_BOOL:
-    printf("> %s\n", (v & BOOL_BIT) ? STR_TRUE : STR_FALSE);
-    break;
-
-    /* There is no way to print tuples or records without using sprintf */
-    case TYPE_TUPLE:
-    printf("> (tuple)\n"); 
-    break;
-
-    case TYPE_RECORD:
-    printf("> {record}\n");
-    break;
-
-    case TYPE_CLOSURE:
-    printf("> <function>\n");
-    break;
-
-    default:
-    printf("> Unknown value: %#018lx", v);
-    break;
-  }
+  printf("> ");
+  printval(v);
+  printf("\n");
   return v;
 }
 
