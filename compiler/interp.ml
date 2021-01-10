@@ -154,6 +154,7 @@ let rec interp ?(env=mt_ienv) (e : expr) : value =
   | Get (_,_) -> Fmt.failwith "Error: Not implemented"
   | Set (_,_,_) -> Fmt.failwith "Error: Not implemented"
   | Length (_) -> Fmt.failwith "Error: Not implemented"
+  | LetRec (_,_) -> Fmt.failwith "Error: Not implemented"
 
 let rec fenv_from_decls (ds: decl list) (fenv: fenv): fenv =
   match ds with

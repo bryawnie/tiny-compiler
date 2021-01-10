@@ -2,15 +2,29 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <inttypes.h>
+#include <sys/resource.h>
 
 #define TRACE 1
 
-
+/* synonym to ease typing/reading */
 typedef uint64_t val;   // any value
 typedef int64_t int_v;  // signed integer
 typedef uint64_t bool_v;// boolean
 
-extern val our_code_starts_here(uint64_t * HEAP) asm("our_code_starts_here");
+/* configuration */
+val STACK_SIZE = 0x800000;
+val HEAP_SIZE = 16;
+int USE_GC = 1;
+
+/* externs */
+extern void error(val err_code, val val) asm("error");
+extern val print(val val) asm("print");
+extern val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) asm("try_gc");
+extern val our_code_starts_here(val* HEAP) asm("our_code_starts_here");
+extern void set_stack_bottom(val* stack_bottom) asm("set_stack_bottom");
+/* */
 
 
 /* TYPE TAGS*/
@@ -177,7 +191,9 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
   return s - str;
 }
 
-void error(int errCode, val v) {
+void error(val err, val v) {
+
+  int_v errCode = (int_v) err;
   const char *format;
 
   switch (errCode){
@@ -299,3 +315,127 @@ int main(int argc, char** argv) {
   free(HEAP);
   return 0;
 }
+
+
+
+/* GC */
+val* HEAP_START;
+val* HEAP_END;
+val* HEAP_MID;
+val* TO_SPACE;
+val* FROM_SPACE;
+val* ALLOC_PTR = 0;
+val* SCAN_PTR = 0;
+val* STACK_BOTTOM = 0;
+
+// void set_stack_bottom(val* stack_bottom) {
+//   STACK_BOTTOM = stack_bottom;
+// }
+
+// bool is_heap_ptr(val v){
+//   return (val *) v < HEAP_END && (val*) v >= HEAP_START;
+// }
+
+// void print_stack(val* rbp, val* rsp) {
+//   printf("|------- frame %p to %p  ------\n", rsp, rbp);
+//   for (val* cur_word = rsp; cur_word < rbp; cur_word++) {
+//     val v = (val) *cur_word;
+//     printf("| %p: %p", cur_word, (val*) *cur_word);
+//     if (is_heap_ptr(v)) {
+//       if (is_tuple(v)){ 
+//         printf(" (tuple)"); 
+//       }
+//       else if (is_closure(v)){ 
+//         printf(" (closure)"); 
+//       }
+//     }
+//     printf("\n");
+//   }
+//   if (rbp < STACK_BOTTOM) {
+//     print_stack((val*) *rbp, rbp + 2);
+//   }
+//   else {
+//     printf("|------- bottom %p  ------\n\n", STACK_BOTTOM);
+//   }
+// }
+
+// void print_heap(val* heap_start, val* heap_end){
+//   printf("| Heap from %p to %p\n", heap_start, heap_end);
+//   for (val i = 0; i <= (val) (heap_end - heap_start); i++) {
+//     printf("|  %lld/%p: %p \n", i, (heap_start + i), (val*)*(heap_start + i));
+//   }
+// }
+
+// void print_heaps(){
+//   printf("|\n|=======HEAP 1==========\n");
+//   print_heap(HEAP_START, HEAP_MID-1);
+//   printf("|=======HEAP 2==========\n");
+//   print_heap(HEAP_MID, HEAP_END);
+//   printf("|=================\n\n");
+// }
+
+
+// val* collect(val* cur_frame, val* cur_sp) {
+//   /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
+//   // swap from-space to-space
+//   // init spaces
+//   // scan stack and copy roots
+//   // scan objects in the heap
+//   // clean old space
+//   return ALLOC_PTR;
+// }
+
+/* trigger GC if enabled and needed, out-of-memory error if insufficient */
+// val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
+//   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+//     printf("| need memory: GC!\n");
+//     alloc_ptr = collect(cur_frame, cur_sp);
+//   }
+//   if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+//     printf("| Error: out of memory!\n\n");
+//     print_stack(cur_frame, cur_sp);
+//     print_heaps();
+//     exit(-1);
+//   }
+//   return alloc_ptr;
+// }
+
+/* start */
+// int main(int argc, char** argv){
+
+//   /* stack size config */
+//   char* stack_size_envvar = getenv("STACK_SIZE");
+//   if (stack_size_envvar) STACK_SIZE = strtoull(stack_size_envvar, NULL, 0);
+//   printf("| Setting stack size to %" PRId64 " .\n", STACK_SIZE);
+//   struct rlimit limit;
+//   getrlimit(RLIMIT_STACK, &limit);
+//   limit.rlim_cur = STACK_SIZE < limit.rlim_max ? STACK_SIZE : limit.rlim_max;
+//   int res = setrlimit(RLIMIT_STACK, &limit);
+//   if (res != 0) { printf("| Setting rlimit failed...\n") ; }
+
+//   /* GC config */
+//   char* use_gc_envvar = getenv("USE_GC");
+//   if (use_gc_envvar) USE_GC = strtoull(use_gc_envvar, NULL, 0);
+//   printf("| Use GC: %d\n", USE_GC);
+
+//   /* heap size config */
+//   char* heap_size_envvar = getenv("HEAP_SIZE");
+//   if (heap_size_envvar) HEAP_SIZE = strtoull(heap_size_envvar, NULL, 0);
+//   printf("| Heap size: %" PRId64 " .\n", HEAP_SIZE);
+
+//   /* setting up two space heap for GC */
+//   val* heap = (val*)calloc((HEAP_SIZE * 2) + 15, sizeof(val));
+//   HEAP_START = (val*)(((val)heap + 15) & ~0xF);
+//   /* TBD: initialize HEAP_MID, HEAP_END, FROM_SPACE, TO_SPACE */
+//   HEAP_MID = 0;   /* TBD */
+//   HEAP_END = 0;   /* TBD */
+//   FROM_SPACE = 0; /* TBD */
+//   TO_SPACE = 0;   /* TBD */
+
+//   /* Go! */
+//   /* Q: when do you need to call `free(heap)`? */
+//   val result = our_code_starts_here(HEAP_START);
+//   print_val(result);
+//   printf("\n");
+//   return 0;
+// }
