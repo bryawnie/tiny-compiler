@@ -1,0 +1,8 @@
+NAME: simple gc
+DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 8, works only for 1 tuple.
+PARAMS: HEAP_SIZE=8, USE_GC=0
+SRC:
+(let (t (tup 1))
+    (let (t2 (tup 2))
+        5))
+EXPECTED: 5

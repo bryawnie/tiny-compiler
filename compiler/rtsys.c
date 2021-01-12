@@ -15,7 +15,7 @@ typedef uint64_t bool_v;// boolean
 
 /* configuration */
 val STACK_SIZE = 0x800000;
-val HEAP_SIZE = 16;
+val HEAP_SIZE = 16; // = 16;
 int USE_GC = 1;
 
 /* externs */
@@ -337,24 +337,24 @@ val first_tup(int_v *a){
 }
 
 /* MAIN */
-int main(int argc, char** argv) {
-  uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
+// int main(int argc, char** argv) {
+//   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
 
-  if (!HEAP){
-    fprintf(stderr, "Heap space allocation failed");
-    exit(-1);
-  }
+//   if (!HEAP){
+//     fprintf(stderr, "Heap space allocation failed");
+//     exit(-1);
+//   }
 
-  val result = our_code_starts_here(HEAP);
+//   val result = our_code_starts_here(HEAP);
 
-  char *str = malloc(charcount(result));
-  sprintval(str, result);
-  printf("%s\n", str);
-  free(str);
+//   char *str = malloc(charcount(result));
+//   sprintval(str, result);
+//   printf("%s\n", str);
+//   free(str);
 
-  free(HEAP);
-  return 0;
-}
+//   free(HEAP);
+//   return 0;
+// }
 
 
 
@@ -368,9 +368,12 @@ val* ALLOC_PTR = 0;
 val* SCAN_PTR = 0;
 val* STACK_BOTTOM = 0;
 
-// void set_stack_bottom(val* stack_bottom) {
-//   STACK_BOTTOM = stack_bottom;
-// }
+/**
+ * Sets the value of stack bottom
+**/
+void set_stack_bottom(val* stack_bottom) {
+  STACK_BOTTOM = stack_bottom;
+}
 
 // bool is_heap_ptr(val v){
 //   return (val *) v < HEAP_END && (val*) v >= HEAP_START;
@@ -441,41 +444,47 @@ val* STACK_BOTTOM = 0;
 // }
 
 /* start */
-// int main(int argc, char** argv){
+int main(int argc, char** argv){
 
-//   /* stack size config */
-//   char* stack_size_envvar = getenv("STACK_SIZE");
-//   if (stack_size_envvar) STACK_SIZE = strtoull(stack_size_envvar, NULL, 0);
-//   printf("| Setting stack size to %" PRId64 " .\n", STACK_SIZE);
-//   struct rlimit limit;
-//   getrlimit(RLIMIT_STACK, &limit);
-//   limit.rlim_cur = STACK_SIZE < limit.rlim_max ? STACK_SIZE : limit.rlim_max;
-//   int res = setrlimit(RLIMIT_STACK, &limit);
-//   if (res != 0) { printf("| Setting rlimit failed...\n") ; }
+  /* stack size config */
+  char* stack_size_envvar = getenv("STACK_SIZE");
+  if (stack_size_envvar) STACK_SIZE = strtoull(stack_size_envvar, NULL, 0);
+  printf("| Setting stack size to %" PRId64 " .\n", STACK_SIZE);
+  struct rlimit limit;
+  getrlimit(RLIMIT_STACK, &limit);
+  limit.rlim_cur = STACK_SIZE < limit.rlim_max ? STACK_SIZE : limit.rlim_max;
+  int res = setrlimit(RLIMIT_STACK, &limit);
+  if (res != 0) { printf("| Setting rlimit failed...\n") ; }
 
-//   /* GC config */
-//   char* use_gc_envvar = getenv("USE_GC");
-//   if (use_gc_envvar) USE_GC = strtoull(use_gc_envvar, NULL, 0);
-//   printf("| Use GC: %d\n", USE_GC);
+  /* GC config */
+  char* use_gc_envvar = getenv("USE_GC");
+  if (use_gc_envvar) USE_GC = strtoull(use_gc_envvar, NULL, 0);
+  printf("| Use GC: %d\n", USE_GC);
 
-//   /* heap size config */
-//   char* heap_size_envvar = getenv("HEAP_SIZE");
-//   if (heap_size_envvar) HEAP_SIZE = strtoull(heap_size_envvar, NULL, 0);
-//   printf("| Heap size: %" PRId64 " .\n", HEAP_SIZE);
+  /* heap size config */
+  char* heap_size_envvar = getenv("HEAP_SIZE");
+  if (heap_size_envvar) HEAP_SIZE = strtoull(heap_size_envvar, NULL, 0);
+  printf("| Heap size: %" PRId64 " .\n", HEAP_SIZE);
 
-//   /* setting up two space heap for GC */
-//   val* heap = (val*)calloc((HEAP_SIZE * 2) + 15, sizeof(val));
-//   HEAP_START = (val*)(((val)heap + 15) & ~0xF);
-//   /* TBD: initialize HEAP_MID, HEAP_END, FROM_SPACE, TO_SPACE */
-//   HEAP_MID = 0;   /* TBD */
-//   HEAP_END = 0;   /* TBD */
-//   FROM_SPACE = 0; /* TBD */
-//   TO_SPACE = 0;   /* TBD */
+  /* setting up two space heap for GC */
+  val* heap = (val*)calloc((HEAP_SIZE * 2) + 15, sizeof(val));
+  HEAP_START = (val*)(((val)heap + 15) & ~0xF);
 
-//   /* Go! */
-//   /* Q: when do you need to call `free(heap)`? */
-//   val result = our_code_starts_here(HEAP_START);
-//   print_val(result);
-//   printf("\n");
-//   return 0;
-// }
+  HEAP_MID    = HEAP_START + HEAP_SIZE;     // Middle of HEAP
+  HEAP_END    = HEAP_START + HEAP_SIZE*2;   // End of HEAP
+  FROM_SPACE  = HEAP_START;   // Initial From Space
+  TO_SPACE    = HEAP_MID;     // Initial To Space
+
+  /* Go! */
+  val result = our_code_starts_here(HEAP_START);
+  char *str = malloc(charcount(result));
+  sprintval(str, result);
+  printf("%s\n", str);
+  free(str);
+
+  /* Q: when do you need to call `free(heap)`? */
+  /* Here */
+  free(heap);
+
+  return 0;
+}

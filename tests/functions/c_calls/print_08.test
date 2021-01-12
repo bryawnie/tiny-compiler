@@ -1,9 +1,0 @@
-NAME: Testing print (records)
-DESCRIPTION: printing tuples
-SRC:
-(record r a b c)
-(let (thing (r 1 2 3)) 
-    (r-c (@sys print thing)))
-EXPECTED:
-> {1 2 3}
-3

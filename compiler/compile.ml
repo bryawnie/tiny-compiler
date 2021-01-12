@@ -434,9 +434,9 @@ let compile_tuple (elems: expr list) (env: env)
     IAdd ((Reg ret_reg), tuple_tag);         (* Tag the tuple *)
     IAdd (Reg heap_reg, Const (Int64.of_int (size*8 + 8 ))) (* Bump the heap pointer *)
   ]
-  @ if (size+1) mod 2 = 1 then
+  (* @ if (size+1) mod 2 = 1 then
     [IAdd (Reg heap_reg, Const 8L)]
-  else []
+  else [] *)
   @ type_checking (Reg ret_reg) TupleT
 
 (* -----------------------------------
@@ -989,6 +989,15 @@ let rec assemble_prog (prog: prog) (env: env):
       
     end
 
+(* Sets the value of Stack bottom *)
+let set_stack_bottom : instruction list =
+  [
+    IPush (Reg RDI);
+    IMov (Reg RDI, Reg RBP);
+    ICall (Label "set_stack_bottom");
+    IPop (Reg RDI);
+  ]
+
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
@@ -1007,6 +1016,7 @@ let compile_prog : prog Fmt.t =
 extern error
 extern print
 extern raw_print
+extern set_stack_bottom
 %a
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;          MAIN PROGRAM         ;;
@@ -1018,9 +1028,16 @@ our_code_starts_here:
   add  R15, 7                   ;; Add 7 to the next multiple of 7
   mov  R11, 0xfffffffffffffff8  ;; R11 is now 11111...1000
   and  R15, R11                 ;; Round back down
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Setting Stack Bottom in RTSYS ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%a
+
 %a" 
       pp_instrs externs 
       pp_instrs callee_prologue 
+      pp_instrs set_stack_bottom
       pp_instrs (
         [ISub (Reg RSP, Const stack_offset)]
         @ instrs 
