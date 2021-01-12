@@ -336,28 +336,6 @@ val first_tup(int_v *a){
   return a[1]>>1;
 }
 
-/* MAIN */
-// int main(int argc, char** argv) {
-//   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
-
-//   if (!HEAP){
-//     fprintf(stderr, "Heap space allocation failed");
-//     exit(-1);
-//   }
-
-//   val result = our_code_starts_here(HEAP);
-
-//   char *str = malloc(charcount(result));
-//   sprintval(str, result);
-//   printf("%s\n", str);
-//   free(str);
-
-//   free(HEAP);
-//   return 0;
-// }
-
-
-
 /* GC */
 val* HEAP_START;
 val* HEAP_END;
@@ -375,73 +353,117 @@ void set_stack_bottom(val* stack_bottom) {
   STACK_BOTTOM = stack_bottom;
 }
 
-// bool is_heap_ptr(val v){
-//   return (val *) v < HEAP_END && (val*) v >= HEAP_START;
-// }
+/**
+ * Is Heap Pointer?
+ * Returns TRUE if v is in range [Hstart, Hend]
+**/
+bool is_heap_ptr(val v){
+  return (val *) v < HEAP_END && (val*) v >= HEAP_START;
+}
 
-// void print_stack(val* rbp, val* rsp) {
-//   printf("|------- frame %p to %p  ------\n", rsp, rbp);
-//   for (val* cur_word = rsp; cur_word < rbp; cur_word++) {
-//     val v = (val) *cur_word;
-//     printf("| %p: %p", cur_word, (val*) *cur_word);
-//     if (is_heap_ptr(v)) {
-//       if (is_tuple(v)){ 
-//         printf(" (tuple)"); 
-//       }
-//       else if (is_closure(v)){ 
-//         printf(" (closure)"); 
-//       }
-//     }
-//     printf("\n");
-//   }
-//   if (rbp < STACK_BOTTOM) {
-//     print_stack((val*) *rbp, rbp + 2);
-//   }
-//   else {
-//     printf("|------- bottom %p  ------\n\n", STACK_BOTTOM);
-//   }
-// }
+/**
+ * Prints the content in current stack frame
+ * recursively calls untils it gets to the bottom
+**/
+void print_stack(val* rbp, val* rsp) {
 
-// void print_heap(val* heap_start, val* heap_end){
-//   printf("| Heap from %p to %p\n", heap_start, heap_end);
-//   for (val i = 0; i <= (val) (heap_end - heap_start); i++) {
-//     printf("|  %lld/%p: %p \n", i, (heap_start + i), (val*)*(heap_start + i));
-//   }
-// }
+  printf("|===============================================\n");
+  printf("|     frame %p to %p   \n", rsp, rbp);
+  printf("|===============================================\n");
+  
+  for (val* cur_word = rsp; cur_word < rbp; cur_word++) {
+    val v = (val) *cur_word;
+    printf("|-- %p: %p ", cur_word, (val*) *cur_word);
+    if (is_heap_ptr(v)) {
+      printval(v);
+    }
+    printf("\n");
+  }
+  if (rbp < STACK_BOTTOM) {
+    print_stack((val*) *rbp, rbp + 2);
+  }
+  else {
+    printf("|======================================\n");
+    printf("|       bottom %p      \n", STACK_BOTTOM);
+    printf("|======================================\n");
+  }
+}
 
-// void print_heaps(){
-//   printf("|\n|=======HEAP 1==========\n");
-//   print_heap(HEAP_START, HEAP_MID-1);
-//   printf("|=======HEAP 2==========\n");
-//   print_heap(HEAP_MID, HEAP_END);
-//   printf("|=================\n\n");
-// }
+/**
+ * Prints the content in heap from 
+ * heap_start to heap_end
+**/
+void print_heap(val* heap_start, val* heap_end){
+  printf("|-> Heap from %p to %p\n", heap_start, heap_end);
+  for (val i = 0; i <= (val) (heap_end - heap_start); i++) {
+    printf("|--  %lld/%p: %p \n", i, (heap_start + i), (val*)*(heap_start + i));
+  }
+}
+
+/**
+ * Prints the content in heaps 
+ * (from-space & to-space)
+**/
+void print_heaps(){
+  printf("\n");
+  printf("|======================\n");
+  printf("|        HEAP 1        \n");
+  printf("|======================\n");
+  print_heap(HEAP_START, HEAP_MID-1);
+  printf("|======================\n");
+  printf("|        HEAP 2        \n");
+  printf("|======================\n");
+  print_heap(HEAP_MID, HEAP_END);
+  printf("|=======================\n\n");
+}
 
 
-// val* collect(val* cur_frame, val* cur_sp) {
-//   /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
-//   // swap from-space to-space
-//   // init spaces
-//   // scan stack and copy roots
-//   // scan objects in the heap
-//   // clean old space
-//   return ALLOC_PTR;
-// }
+val copy(val v){
+  // TBD: Copy an alement
+  return v;
+}
+
+val* collect(val* cur_frame, val* cur_sp) {
+  /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
+  // swap from-space to-space
+  val * tmp = FROM_SPACE;
+  FROM_SPACE = TO_SPACE;
+  TO_SPACE = tmp; 
+
+  // init spaces
+  ALLOC_PTR = TO_SPACE;
+  SCAN_PTR = TO_SPACE;
+
+  // for root in stack
+  for (val* cur_word = cur_sp; cur_word < cur_frame; cur_word++) {
+    val v = (val) *cur_word;  // The value in stack
+
+    // scan stack and copy roots
+    if (is_heap_ptr(v)) {     // If pointer to heap
+      *cur_word = copy(v);    // Creates a copy in to_space
+    }
+  }
+  
+  // TBD: scan objects in the heap
+  // TBD: clean old space
+  return ALLOC_PTR; // does nothing actually
+}
 
 /* trigger GC if enabled and needed, out-of-memory error if insufficient */
-// val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
-//   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-//     printf("| need memory: GC!\n");
-//     alloc_ptr = collect(cur_frame, cur_sp);
-//   }
-//   if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-//     printf("| Error: out of memory!\n\n");
-//     print_stack(cur_frame, cur_sp);
-//     print_heaps();
-//     exit(-1);
-//   }
-//   return alloc_ptr;
-// }
+val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
+  // WIP: collect function
+  // if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+  //   printf("| need memory: GC!\n");
+  //   alloc_ptr = collect(cur_frame, cur_sp);
+  // }
+  // if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+  //   printf("| Error: out of memory!\n\n");
+  //   print_stack(cur_frame, cur_sp);
+  //   print_heaps();
+  //   exit(-1);
+  // }
+  return alloc_ptr;
+}
 
 /* start */
 int main(int argc, char** argv){
@@ -488,3 +510,30 @@ int main(int argc, char** argv){
 
   return 0;
 }
+
+
+/**
+ * OLD (DEAD) CODE
+ * Not useful anymore
+ * -- DELETE BEFORE SUBMIT --
+**/
+
+/* MAIN */
+// int main(int argc, char** argv) {
+//   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
+
+//   if (!HEAP){
+//     fprintf(stderr, "Heap space allocation failed");
+//     exit(-1);
+//   }
+
+//   val result = our_code_starts_here(HEAP);
+
+//   char *str = malloc(charcount(result));
+//   sprintval(str, result);
+//   printf("%s\n", str);
+//   free(str);
+
+//   free(HEAP);
+//   return 0;
+// }

@@ -27,6 +27,32 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+let try_gc (n: int): instruction list = [
+
+  IEmpty;
+  IComment "Trying GC for allocating memory";
+
+  IPush (Reg RDI);
+  IPush (Reg RSI);
+  IPush (Reg RDX);
+  IPush (Reg RCX);
+
+  IMov (Reg RDI, Reg heap_reg);           (* Alloc Pointer *)
+  IMov (Reg RSI, Const (Int64.of_int n)); (* Words Needed *)
+  IMov (Reg RDX, Reg RBP);  (* Current Frame *)
+  IMov (Reg RCX, Reg RSP);  (* Current Stack Pointer *)
+  ICall (Label "try_gc");
+  IMov (Reg heap_reg, Reg ret_reg); (*Returns the new Alloc pointer*)
+
+  IPop (Reg RCX);
+  IPop (Reg RDX);
+  IPop (Reg RSI);
+  IPop (Reg RDI);
+
+  IComment "END of GC";
+  IEmpty;
+]
+
 (* Counts the max number of expressions mantained in stack at the same time *)
 let rec varcount (e:expr): int =
   match e with
@@ -166,7 +192,7 @@ let compile_closure (label: string) (arity: int64) (free_vars: string list)
     in
     List.concat @@ List.mapi instructions ids
   in
-
+  try_gc size @
   [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity)) (* arity *)
   ; IMov (RegOffset (heap_reg, 1), Label label)       (* code pointer *)
   ; IMov (RegOffset (heap_reg, 2), Const num_fv)]    (* free var count*)
@@ -427,6 +453,7 @@ let compile_tuple (elems: expr list) (env: env)
   let size = List.length elems in
   let assign_tuple = assign_tuple_values 1 size env in
   compile_elems @ 
+  try_gc (List.length elems + 1) @  (* Garbage Collector *)
   [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ 
   assign_tuple @
   [
@@ -955,7 +982,7 @@ let rec assemble_prog (prog: prog) (env: env):
   let Program (decls, main) = prog in
   match decls with
   | [] -> [], 
-    [IComment "<<========# Main #========>>"; ILabel "__main__"] 
+    [IEmpty; IComment "<<========# Main #========>>"; IEmpty; ILabel "__main__"] 
     @ compile_expr main env
   | hd::tl ->
     begin
@@ -1015,8 +1042,10 @@ let compile_prog : prog Fmt.t =
 ;; Also called system functions
 extern error
 extern print
+extern try_gc
 extern raw_print
 extern set_stack_bottom
+
 %a
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;          MAIN PROGRAM         ;;
