@@ -1,6 +1,7 @@
 NAME: simple gc
 DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 2, works only for 1 tuple.
-PARAMS: HEAP_SIZE=2, USE_GC=1
+PARAMS: HEAP_SIZE=2, USE_GC=0
+STATUS: RT error
 SRC:
 (let (x (get (tup 5) 0))
     (let (t2 (tup 2))
