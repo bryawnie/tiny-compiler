@@ -1,4 +1,5 @@
 NAME: field getter
+PARAMS: HEAP_SIZE=32
 SRC:
 (record point3d x y z)
 (def (invert p)
