@@ -3,15 +3,13 @@ __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
 
-# Entrega 4
-En esta entrega se añade una esperada *feature* para el lenguaje, **funciones de primera clase**. Recordamos que en las versiones previas, solo se contaba con funciones de primer orden, las cuales son bastante limitadas, dado que deben definirse de forma aparte, y además no podían ser tratadas como valores. En esta nueva versión, se añade soporte a las siguientes *specs básicas* esperadas:
-- [x] Funciones como valores de primera clase.
-- [x] Lambdas y clausuras.
+# Entrega 5
+En esta entrega se añade un Garbage Collector para el lenguaje, el cual se basa en el [Algoritmo de Cheney](https://en.wikipedia.org/wiki/Cheney%27s_algorithm) (C.J. Cheney). El método consiste en dividir el espacio del *heap* en dos mitades iguales, de las cuales, sólo una se encuentra en uso a la vez.
 
-Así como para la característica adicional:
-- [x] Lambdas recursivas (`letrec`).
+La recolección de basura se realiza copiando los objetos "vivos" de un espacio (`from-space`) al otro (`to-space`). Este último se convierte en el nuevo espacio de objetos.
 
-## Especificación
+## Especificación e Implementación
+
 ### Funciones como Valores
 Se realiza un *upgrade* a las funciones de primer orden previamente implementadas por el lenguaje. En este nuevo escenario, estas pueden ser tratadas como valores, permitiendo su paso a través de llamada de funciones. Un ejemplo puede ser el siguiente:
 ```
