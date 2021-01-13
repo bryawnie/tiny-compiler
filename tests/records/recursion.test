@@ -1,5 +1,6 @@
 NAME: record recursion
 DESCRIPTION: definition of recursive structure.
+PARAMS: HEAP_SIZE=32
 SRC:
 (record list head tail)
 (def (length l)

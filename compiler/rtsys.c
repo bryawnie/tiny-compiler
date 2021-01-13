@@ -457,13 +457,12 @@ val copy_closure(val v){
   // Obtains the closure
   val * closure = VAL_TO_PTR(v);
   // First, copy the arity
-  *ALLOC_PTR++ = *VAL_TO_PTR(v);
+  *ALLOC_PTR++ = *closure++;
   // Then, copy the address in code (label)
-  *ALLOC_PTR++ = CLOSURE_ADDRESS(v);
+  *ALLOC_PTR++ = *closure++;
   // After that, the number of free vars
-  int free_vars = *(closure+2);
+  int free_vars = *closure++;
   *ALLOC_PTR++ = free_vars;
-  closure +=3;
   // And now on, all the free vars values
   for (int i = 0; i < free_vars; i++){
     *ALLOC_PTR++ = *(closure++);
