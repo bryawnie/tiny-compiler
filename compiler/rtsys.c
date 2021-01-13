@@ -440,7 +440,7 @@ val copy_tuple(val v){
   val * tup = TUPLE_TO_ARRAY(v);
   val size = GET_TUPLE_SIZE(v);
   // First, copy the size
-  *ALLOC_PTR++ = size;
+  *ALLOC_PTR++ = *VAL_TO_PTR(v);
   // And now on, all the elements
   for (int i = 0; i < size; i++){
     *ALLOC_PTR++ = tup[i];
@@ -457,7 +457,7 @@ val copy_closure(val v){
   // Obtains the closure
   val * closure = VAL_TO_PTR(v);
   // First, copy the arity
-  *ALLOC_PTR++ = CLOSURE_ARITY(v);
+  *ALLOC_PTR++ = *VAL_TO_PTR(v);
   // Then, copy the address in code (label)
   *ALLOC_PTR++ = CLOSURE_ADDRESS(v);
   // After that, the number of free vars
@@ -512,14 +512,9 @@ val copy(val v){
 val* collect(val* cur_frame, val* cur_sp) {
   /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
 
-  // swap from-space to-space
-  val * tmp  = FROM_SPACE;
-  FROM_SPACE = TO_SPACE;
-  TO_SPACE   = tmp; 
-
   // init pointers
-  ALLOC_PTR = TO_SPACE;
-  SCAN_PTR  = TO_SPACE;
+  ALLOC_PTR = TO_SPACE; // TO_SPACE IS EMPTY
+  SCAN_PTR  = TO_SPACE; // TO_SPACE IS EMPTY
 
   val* ptr;
 
@@ -541,11 +536,15 @@ val* collect(val* cur_frame, val* cur_sp) {
   }
   
   // Cleaning from-space
-  tmp = FROM_SPACE;
+  val * tmp = FROM_SPACE;
   val * END = (val) HEAP_MID > (val) FROM_SPACE ? HEAP_MID : HEAP_END;
   while (tmp < END) {
     *tmp++ = 0;
   }
+
+  tmp = FROM_SPACE;
+  FROM_SPACE = TO_SPACE;
+  TO_SPACE = tmp;
   
   return ALLOC_PTR;
 }
@@ -554,8 +553,11 @@ val* collect(val* cur_frame, val* cur_sp) {
 val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
   // WIP: collect function
   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+    //printf("| Before GC \n");
+    //print_heaps();
     printf("| need memory: GC!\n");
     alloc_ptr = collect(cur_frame, cur_sp);
+    //print_heaps();
   }
   if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
     printf("| Error: out of memory!\n\n");
@@ -595,7 +597,7 @@ int main(int argc, char** argv){
 
   HEAP_MID    = HEAP_START + HEAP_SIZE;     // Middle of HEAP
   HEAP_END    = HEAP_START + HEAP_SIZE*2;   // End of HEAP
-  FROM_SPACE  = HEAP_START;   // Initial From Space
+  FROM_SPACE  = HEAP_START;       // Initial From Space
   TO_SPACE    = HEAP_MID;     // Initial To Space
 
   /* Go! */

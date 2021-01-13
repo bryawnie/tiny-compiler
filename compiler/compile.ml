@@ -1054,9 +1054,6 @@ global our_code_starts_here
 our_code_starts_here:
 %a
   mov  R15, RDI                 ;; load R15 with the passed HEAP
-  add  R15, 7                   ;; Add 7 to the next multiple of 7
-  mov  R11, 0xfffffffffffffff8  ;; R11 is now 11111...1000
-  and  R15, R11                 ;; Round back down
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Setting Stack Bottom in RTSYS ;;
