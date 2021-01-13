@@ -552,11 +552,8 @@ val* collect(val* cur_frame, val* cur_sp) {
 val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
   // WIP: collect function
   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-    //printf("| Before GC \n");
-    //print_heaps();
     printf("| need memory: GC!\n");
     alloc_ptr = collect(cur_frame, cur_sp);
-    //print_heaps();
   }
   if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
     printf("| Error: out of memory!\n\n");
@@ -612,30 +609,3 @@ int main(int argc, char** argv){
 
   return 0;
 }
-
-
-/**
- * OLD (DEAD) CODE
- * Not useful anymore
- * -- DELETE BEFORE SUBMIT --
-**/
-
-/* MAIN */
-// int main(int argc, char** argv) {
-//   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
-
-//   if (!HEAP){
-//     fprintf(stderr, "Heap space allocation failed");
-//     exit(-1);
-//   }
-
-//   val result = our_code_starts_here(HEAP);
-
-//   char *str = malloc(charcount(result));
-//   sprintval(str, result);
-//   printf("%s\n", str);
-//   free(str);
-
-//   free(HEAP);
-//   return 0;
-// }
