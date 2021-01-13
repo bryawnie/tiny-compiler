@@ -1,4 +1,5 @@
 NAME: Enunciado Lambdas test
+PARAMS: HEAP_SIZE=32, USE_GC=0
 SRC:
 
 (def (fib n) 
