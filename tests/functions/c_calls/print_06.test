@@ -1,0 +1,8 @@
+NAME: Testing print (tuples)
+DESCRIPTION: printing tuples
+SRC:
+(@sys print (get (@sys print (tup 1 2 3)) 0))
+EXPECTED:
+> (tup 1 2 3)
+> 1
+1

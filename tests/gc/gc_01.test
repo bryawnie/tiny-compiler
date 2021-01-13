@@ -1,0 +1,17 @@
+NAME: try gc
+DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 16
+PARAMS: HEAP_SIZE=16, USE_GC=1
+SRC:
+(def (f)
+    (+ (let (t (tup 2 (tup 3 4)))
+        (let (x (get (get (tup 1 t) 1) 0))
+            x))
+        (let (z (tup 100))
+            (get z 0))))
+
+(let (res (f))
+    (+ res (let (z (tup 100))
+                (let (w (tup 3 4 5 6))
+                    (get z 0)))))
+EXPECTED: 
+202
