@@ -8,8 +8,24 @@ En esta entrega se añade un Garbage Collector para el lenguaje, el cual se basa
 
 La recolección de basura se realiza copiando los objetos "vivos" de un espacio (`from-space`) al otro (`to-space`). Este último se convierte en el nuevo espacio de objetos.
 
-## Especificación e Implementación
+## Especificación
+Al ejecutar un programa, se le puede pasar por parámetro el tamaño que dispondrá el *heap*, en número de "slots" de 8 bytes. Es decir, si se fija:
+```
+HEAP_SIZE=2
+```
+El tamaño del *heap* será de 2 "slots" de 8 bytes, equivalente a 16 bytes. Este tamaño corresponde tanto al del `from-space` como el de el `to-space`, por lo que finalmente, el pedido de memoria al sistema será de 32 bytes.
 
+Adicionalmente, se puede fijar si se desea o no utilizar el Garbage Collector añadido, con la opción:
+```
+USE_GC=0 ;; Si no se desea utilizar el GC.
+USE_GC=1 ;; Si se desea utilizar.
+```
+
+Por defecto, los valores son `HEAP_SIZE=16` y `USE_GC=1`.
+
+El razonamiento es sencillo, se inicia el programa guardando las nuevas instancias de objeto (ya sea *tupla*, *clausura* o *record*) en el `from-space`. Una vez que al necesitar alocar un nuevo elemento, la memoria en `from-space` sea insuficiente, se realiza una copia al `to-space` de todos aquellos elementos que sean referenciados desde el frame actual del `stack`, y aquellos referenciados por estos. Finalmente, se vacía el `from-space` y se hace un `swap` entre los espacios, a modo de que los objetos vuelvan a estar en el `from-space`.
+
+## Implementación
 ### Funciones como Valores
 Se realiza un *upgrade* a las funciones de primer orden previamente implementadas por el lenguaje. En este nuevo escenario, estas pueden ser tratadas como valores, permitiendo su paso a través de llamada de funciones. Un ejemplo puede ser el siguiente:
 ```
