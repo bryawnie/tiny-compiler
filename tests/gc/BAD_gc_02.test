@@ -5,4 +5,5 @@ SRC:
 (let (x (get (tup 5) 0))
     (let (t2 (tup 2))
         x))
-EXPECTED: 5
+EXPECTED:
+out of memory

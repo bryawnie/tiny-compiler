@@ -362,6 +362,19 @@ bool is_heap_ptr(val v){
 }
 
 /**
+ * Indicates if a pointer is an instance of forwadding address
+ * (ie: if is a pointer to to-space)
+**/
+bool is_forwadding_addr(val * ptr){
+  // | FROM_SPACE | TO_SPACE |
+  if (TO_SPACE > FROM_SPACE)
+    return HEAP_MID < ptr && ptr < HEAP_END;
+  // | TO_SPACE | FROM_SPACE |
+  else
+    return HEAP_START < ptr && ptr < HEAP_MID;
+}
+
+/**
  * Prints the content in current stack frame
  * recursively calls untils it gets to the bottom
 **/
@@ -417,51 +430,139 @@ void print_heaps(){
   printf("|=======================\n\n");
 }
 
+/**
+ * Makes a copy of a tuple in alloc pointer
+**/
+val copy_tuple(val v){
+  // Saves and tags the addres
+  val addr = ((val) ALLOC_PTR | TAG_TUPLE);
+  // Obtains tuple as array
+  val * tup = TUPLE_TO_ARRAY(v);
+  val size = GET_TUPLE_SIZE(v);
+  // First, copy the size
+  *ALLOC_PTR++ = size;
+  // And now on, all the elements
+  for (int i = 0; i < size; i++){
+    *ALLOC_PTR++ = tup[i];
+  }
+  return addr;
+}
 
+/**
+ * Makes a copy of a closure in alloc pointer
+**/
+val copy_closure(val v){
+  // Saves and tags the addres
+  val addr = ((val) ALLOC_PTR | TAG_CLOSURE);
+  // Obtains the closure
+  val * closure = VAL_TO_PTR(v);
+  // First, copy the arity
+  *ALLOC_PTR++ = CLOSURE_ARITY(v);
+  // Then, copy the address in code (label)
+  *ALLOC_PTR++ = CLOSURE_ADDRESS(v);
+  // After that, the number of free vars
+  int free_vars = *(closure+2);
+  *ALLOC_PTR++ = free_vars;
+  closure +=3;
+  // And now on, all the free vars values
+  for (int i = 0; i < free_vars; i++){
+    *ALLOC_PTR++ = *(closure++);
+  }
+  return addr;
+}
+
+/**
+ * Makes a copy of a record in alloc pointer
+**/
+val copy_record(val v){
+  // Saves and tags the addres
+  val addr = ((val) ALLOC_PTR | TAG_RECORD);
+  // First copy the header
+  *ALLOC_PTR++ = *VAL_TO_PTR(v);
+  // Then, the elements
+  int size = GET_RECORD_SIZE(v);
+  val* rec = RECORD_TO_ARRAY(v);
+  for (int i = 0; i < size; i++){
+    *ALLOC_PTR++ = rec[i];
+  }
+  return addr;
+}
+
+/**
+ * Makes a copy of objects in from-space
+ * if is a forwadding address returns itself
+**/
 val copy(val v){
-  // TBD: Copy an alement
+  val* ptr = (val*) v;
+  if (!is_forwadding_addr(ptr)){
+    switch (typeofval(v)){
+      case TYPE_TUPLE:
+        return copy_tuple(v);
+      case TYPE_CLOSURE:
+        return copy_closure(v);
+      case TYPE_RECORD:
+        return copy_record(v);
+      default:
+        break;
+    }
+  }
   return v;
 }
 
 val* collect(val* cur_frame, val* cur_sp) {
   /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
-  // swap from-space to-space
-  val * tmp = FROM_SPACE;
-  FROM_SPACE = TO_SPACE;
-  TO_SPACE = tmp; 
 
-  // init spaces
+  // swap from-space to-space
+  val * tmp  = FROM_SPACE;
+  FROM_SPACE = TO_SPACE;
+  TO_SPACE   = tmp; 
+
+  // init pointers
   ALLOC_PTR = TO_SPACE;
-  SCAN_PTR = TO_SPACE;
+  SCAN_PTR  = TO_SPACE;
+
+  val* ptr;
 
   // for root in stack
   for (val* cur_word = cur_sp; cur_word < cur_frame; cur_word++) {
-    val v = (val) *cur_word;  // The value in stack
-
-    // scan stack and copy roots
-    if (is_heap_ptr(v)) {     // If pointer to heap
-      *cur_word = copy(v);    // Creates a copy in to_space
+    val v = (val) *cur_word;    // The value in stack
+    if (is_heap_ptr(v)) {       // If pointer to heap
+      *cur_word = copy(v);      // Creates a copy in to-space
     }
   }
+
+  // Scanning objects in heap
+  while (SCAN_PTR < ALLOC_PTR){
+    val v = *SCAN_PTR;
+    if (is_heap_ptr(v)) {       // If pointer to heap
+      *SCAN_PTR = copy(v);      // Creates a copy in to-space
+    }
+    SCAN_PTR++;
+  }
   
-  // TBD: scan objects in the heap
-  // TBD: clean old space
-  return ALLOC_PTR; // does nothing actually
+  // Cleaning from-space
+  tmp = FROM_SPACE;
+  val * END = (val) HEAP_MID > (val) FROM_SPACE ? HEAP_MID : HEAP_END;
+  while (tmp < END) {
+    *tmp++ = 0;
+  }
+  
+  return ALLOC_PTR;
 }
 
 /* trigger GC if enabled and needed, out-of-memory error if insufficient */
 val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
   // WIP: collect function
-  // if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-  //   printf("| need memory: GC!\n");
-  //   alloc_ptr = collect(cur_frame, cur_sp);
-  // }
-  // if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-  //   printf("| Error: out of memory!\n\n");
-  //   print_stack(cur_frame, cur_sp);
-  //   print_heaps();
-  //   exit(-1);
-  // }
+  if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+    printf("| need memory: GC!\n");
+    alloc_ptr = collect(cur_frame, cur_sp);
+  }
+  if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
+    printf("| Error: out of memory!\n\n");
+    print_stack(cur_frame, cur_sp);
+    print_heaps();
+    exit(-1);
+  }
   return alloc_ptr;
 }
 
