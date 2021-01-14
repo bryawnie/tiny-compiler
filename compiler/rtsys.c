@@ -130,69 +130,69 @@ int arr_charcount(val *a, int size) {
 
 
 /* applies printval to an array of values */
-void arr_printval(val* a, int size, char* prefix, char* suffix);
+void arr_printval(FILE *out, val* a, int size, char* prefix, char* suffix);
 
 /* Prints a value by standard output */
-void printval(val v) {
+void printval(FILE *out, val v) {
 
   /* fprintf(stderr, "sprintval: str=%p, v=%ld\n", str, v); */
   
   switch (typeofval(v)) {
 
     case TYPE_INT:
-      printf("%ld", ((int_v) v) >> 1);
+      fprintf(out, "%ld", ((int_v) v) >> 1);
       break;
 
     case TYPE_BOOL:
       switch (v) {
         case VAL_TRUE:
-          printf("%s", STR_TRUE);
+          fprintf(out, "%s", STR_TRUE);
           break;
         case VAL_FALSE:
-          printf("%s", STR_FALSE);
+          fprintf(out, "%s", STR_FALSE);
           break;
         default:
-          printf("Unknown value: %#018lx", v);
+          fprintf(out, "Unknown value: %#018lx", v);
           break;
       }
       break;
 
     case TYPE_TUPLE:
       if (GET_TUPLE_SIZE(v) == 0)
-        printf("(tup)\n");
-      arr_printval(TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
+        fprintf(out, "(tup)\n");
+      arr_printval(out, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
       break;
 
     case TYPE_RECORD:
       if (GET_RECORD_SIZE(v) == 0)
-        printf("{}\n");
-      arr_sprintval(RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
+        fprintf(out, "{}\n");
+      arr_printval(out, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
       break;
 
     case TYPE_CLOSURE:
-      printf("<Function at %#.16lx with arity %ld>",
+      fprintf(out, "<Function at %#.16lx with arity %ld>",
         CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
       break;
 
     default:
-      printf("Unknown value: %#018lx", v);
+      fprintf(out, "Unknown value: %#018lx", v);
       break;
   }
 
 }
 
-void arr_printval(val *a, int size, char* pre, char* post) {
+void arr_printval(FILE* out, val *a, int size, char* pre, char* post) {
   /* 
   fprintf(stderr, "arr_sprintval: str=%p, a=%p, size=%d, pre='%s', post='%s'",
     str, a, size, pre, post);
    */
-  printf("%s", pre);
+  fprintf(out, "%s", pre);
   for (int i = 0; i < size; i++) {
-    printval(a[i]);
-    if (i + 1 < size) printf(" ");
-      
+    printval(out, a[i]);
+    if (i + 1 < size) 
+      fprintf(out, " ");  
   }
-  printf("%s", post);
+  fprintf(out, "%s", post);
 }
 
 
@@ -266,50 +266,53 @@ void error(val err, val v) {
 
   switch (errCode){
   case ERR_NOT_NUMBER:
-    format = "Expected number, but got %s\n";
+    format = "Expected number, but got ";
     break;
   case ERR_NOT_BOOLEAN:
-    format =  "Expected boolean, but got %s\n";
+    format =  "Expected boolean, but got ";
     break;
   case ERR_NOT_TUPLE:
-    format = "Expected tuple, but got %s\n";
+    format = "Expected tuple, but got ";
     break;
   case ERR_NEG_INDEX:
-    format = "Unexpected negative index %s\n";
+    format = "Unexpected negative index ";
     break;
   case ERR_INDEX_OVERFLOW:
-    format = "Index out of bounds %s\n";
+    format = "Index out of bounds ";
     break;
   case ERR_NOT_RECORD:
-    format = "Expected record, but got %s\n";
+    format = "Expected record, but got ";
     break;
   case ERR_RECORD_TYPE:
-    format = "Got record with incorrect type: %s\n";
+    format = "Got record with incorrect type: ";
     break;
   case ERR_ARITY_MISMATCH:
-    format = "Arity mismatch: function expects %s arguments\n";
+    fprintf(stderr, "Arity mismatch: function expects ");
+    printval(stderr, v);
+    fprintf(stderr, " arguments\n");
+    goto end;
     break;
   case ERR_NOT_CLOSURE:
-    format = "Expected a function, got %s\n";
+    format = "Expected a function, got ";
     break;
   default:
     fprintf(stderr, "Unknown error code: %d", errCode);
-    exit(errCode);
+    goto end;
     break;
   }
 
-  char *str = malloc(charcount(v));
-  sprintval(str, v);
-  fprintf(stderr, format, str);
-  free(str);
+  fprintf(stderr, format);
+  printval(stderr, v);
+  fprintf(stderr, "\n");
 
+end:
   exit(errCode);
 }
 
 /* DEFAULT FOREIGN FUNCTIONS */
 val print(val v) {
   printf("> ");
-  printval(v);
+  printval(stdout, v);
   printf("\n");
   return v;
 }
@@ -388,7 +391,7 @@ void print_stack(val* rbp, val* rsp) {
     val v = (val) *cur_word;
     printf("|-- %p: %p ", cur_word, (val*) *cur_word);
     if (is_heap_ptr(v)) {
-      printval(v);
+      printval(stdout, v);
     }
     printf("\n");
   }
