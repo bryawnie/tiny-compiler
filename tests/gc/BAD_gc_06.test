@@ -1,0 +1,12 @@
+NAME: recursive structures gc
+DESCRIPTION: in this case we have 2 tuples that references each other
+PARAMS: HEAP_SIZE=6, USE_GC=0
+STATUS: RT error
+SRC:
+(let (t (get (tup 8) 0))
+    (let (q (tup 2))
+        (let (t (tup q))
+            (let (x (set q 0 t))
+                (tup)))))
+EXPECTED:
+out of memory

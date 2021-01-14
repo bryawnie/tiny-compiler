@@ -3,149 +3,173 @@ __[ CC5116 ] - Diseño e Implementación de Compiladores__.
 
 Sergio Morales & Bryan Ortiz.
 
-# Entrega 4
-En esta entrega se añade una esperada *feature* para el lenguaje, **funciones de primera clase**. Recordamos que en las versiones previas, solo se contaba con funciones de primer orden, las cuales son bastante limitadas, dado que deben definirse de forma aparte, y además no podían ser tratadas como valores. En esta nueva versión, se añade soporte a las siguientes *specs básicas* esperadas:
-- [x] Funciones como valores de primera clase.
-- [x] Lambdas y clausuras.
+# Entrega 5
+En esta entrega se añade un Garbage Collector para el lenguaje, el cual se basa en el [Algoritmo de Cheney](https://en.wikipedia.org/wiki/Cheney%27s_algorithm) (C.J. Cheney). El método consiste en dividir el espacio del *heap* en dos mitades iguales, de las cuales, sólo una se encuentra en uso a la vez.
 
-Así como para la característica adicional:
-- [x] Lambdas recursivas (`letrec`).
+La recolección de basura se realiza copiando los objetos "vivos" de un espacio (`from-space`) al otro (`to-space`). Este último se convierte en el nuevo espacio de objetos.
 
 ## Especificación
-### Funciones como Valores
-Se realiza un *upgrade* a las funciones de primer orden previamente implementadas por el lenguaje. En este nuevo escenario, estas pueden ser tratadas como valores, permitiendo su paso a través de llamada de funciones. Un ejemplo puede ser el siguiente:
+Al ejecutar un programa, se le puede pasar por parámetro el tamaño que dispondrá el *heap*, en número de "slots" de 8 bytes. Es decir, si se fija:
 ```
-(def (applyToFive it)
-  (it 5))
+HEAP_SIZE=2
+```
+El tamaño del *heap* será de 2 "slots" de 8 bytes, equivalente a 16 bytes. Este tamaño corresponde tanto al del `from-space` como el de el `to-space`, por lo que finalmente, el pedido de memoria al sistema será de 32 bytes.
 
-(def (incr x)
-  (+ x 1))
-
-(applyToFive incr)
+Adicionalmente, se puede fijar si se desea o no utilizar el Garbage Collector añadido, con la opción:
 ```
-Se observa cómo `applyToFive` recibe como argumento una función `it`, la cual es aplicada al valor 5. Es decir, ahora una función pasa a ser una `expr` como cualquier otra.
-
-### Lambdas (λ)
-Se implementan funciones lambdas (o anónimas), las cuales pueden definirse dentro de una sentencia `let`. Estas funciones no poseen nombre alguno, y su existencia permite funciones de orden superior como `addn`, la cual recibe un argumento `n` y retorna una función que suma n a su propio argumento. Se presenta un ejemplo:
-```
-(let (addn (λ (n) 
-            (λ (x) (+ x n))))
-    (let (add5 (addn 5))
-        (add5 6)))
-```
-El programa anterior debería devolver 11, pues `add5` es una función que suma 5 a su argumento.
-
-Se observa a través del ejemplo que la sintaxis concreta para definir funciones anónimas es:
-```
-(λ (<ids> ...) <body>)
+USE_GC=0 ;; Si no se desea utilizar el GC.
+USE_GC=1 ;; Si se desea utilizar.
 ```
 
-### Clausuras
-Al momento de definir funciones, en especial las lambdas, se hace necesario capturar el ambiente de definición para conservar *scope* léxico. Esto permite poder acceder a las ids definidas fuera de la función, las cuales podrían ser detectadas como identificadoes libres si no se resguardan adecuadamente. Por ejemplo:
-```
-(let (n 5)
-    (let (addn (λ (x) (+ x n)))
-        (addn 3)))
-```
-El programa anterior debería entregar como resultado 8. Sin embargo, si el acceso a `n` dentro de la función se pierde, generaría un error. Por tanto, es necesario encapsular esto en clausuras. En particular, las funciones definidas con `def`, no requieren guardar ninguna variable libre ya que al momento de su definición, aun no se introduce ninguna variable en *scope*. Sin embargo, se opta por representarlas mediante clausuras igualmente, para mayor armonía entre funciones.
+Por defecto, los valores son `HEAP_SIZE=16` y `USE_GC=1`.
 
-### Lambdas recursivas
-La principal limitación de las lambdas, en comparación con las funciones con nombre, es que no pueden ser definidas recursivamente. Para incorporar esta funcionalidad se introduce la expresión `letrec` con la siguiente sintaxis:
-```
-(letrec ((<id> <expr>) ...) <expr>)
-```
-Su funcionamiento es análogo al de la expresión `let` tradicional, con la diferencia de que las expresiones a las que se asocian los identificadores sólo pueden ser lambdas, pues el lenguaje no soporta definiciones recursivas para otros tipos de valor.
+El razonamiento es sencillo, se inicia el programa guardando las nuevas instancias de objeto (ya sea *tupla*, *clausura* o *record*) en el `from-space`. Una vez que al necesitar alocar un nuevo elemento, la memoria en `from-space` sea insuficiente, se realiza una copia al `to-space` de todos aquellos elementos que sean referenciados desde el frame actual del `stack`, y aquellos referenciados por estos. Finalmente, se vacía el `from-space` y se hace un `swap` entre los espacios, a modo de que los objetos vuelvan a estar en el `from-space`.
 
 ## Implementación
-Tanto funciones definidas fuera del programa principal con `def`, como las funciones lambdas fueron implementadas mediante clausuras, por lo tanto, se tratará a ambas por igual desde este punto, con la única salvedad de que las funciones previamente definidas no requieren añadir variables libres a su scope, y que poseen un nombre definido, lo que simplifica su referencia al aplicar recursión.
 
-Para la implementación de clausuras, se establece una estructura de datos en heap de la siguiente forma:
-
-N° Params | Label | N° Free Ids | Free Id #1 | ... | Free Id #n
--- | -- | -- | -- | -- | --
-
-Esto permite conocer el número de parámetros que recibe la función, un puntero a su codigo fuente mediante su label en *assembly*, el número de variables libres a guardar, y finalmente los valores de tales identificadores libres.
-
-La creación de la clausura de una función se presenta casi en su totalidad en `compile.ml: compile_closure`, donde se ve que el proceso es similar a lo siguiente:
+### Main
+Dentro de la función main del *runtime system*, se consideran las siguientes constantes:
+```C
+  HEAP_MID    = HEAP_START + HEAP_SIZE;     // Middle of HEAP
+  HEAP_END    = HEAP_START + HEAP_SIZE*2;   // End of HEAP
+  FROM_SPACE  = HEAP_START;                 // Initial From Space
+  TO_SPACE    = HEAP_MID;                   // Initial To Space
 ```
-mov   [R15], <N° Params>
-mov   [R15 + 8], <Label>
-mov   [R15 + 16], <N° Free Ids>
-mov   [R15 + 24], <Free Id #1>          ;; Solo si aplica
-...
-mov   [R15 + (16+8k)], <Free Id #k>     ;; Solo si aplica
+donde `HEAP_START` es la dirección de inicio del *heap*. Con esto se puede controlar los espacios existentes en el heap, donde (inicialmente) se dividirán como:
 ```
-Tras crear la clausura, esta se guarda en un registro a conveniencia y se le añade un tag identificador para clausuras `111`. Podemos recordar los tags en la siguiente tabla:
-
-| Tipo de dato | Tag |
-| ------------ | --- |
-| Entero (int) | `__0` |
-| Booleano     | `001` |
-| Tupla        | `011` |
-| Record       | `101` |
-| **Clausura** | `111` |
-
-Adicionalmente, se hace un análogo a los métodos Python, donde se pasa una referencia a *self* como primer argumento implícito. En este caso, el primer argumento de cada llamada a función (sea λ o definida) será la misma clausura, permitiendo una recursión sencilla en el caso de las funciones definidas con `def`, ya que el nombre de la función corresponde a su label en *assembly*. En contraparte, funciones lambdas no tienen esta facilidad, ya que el interior de una función no sabe cómo fue llamada por fuera.
-
-#### Free Ids
-Como se mencionó previamente, una función anónima podría necesitar capturar los identificadores asociados a algún valor al momento de su definición. Se vio que estas son guardadas en la clausura misma, por lo que al momento de aplicación es posible acceder a ellas mediante **[RDI + (2+8*i*)]**. Sin embargo esto complica un poco el *lookup* de ids, ya que estas podrían estar en Stack (como había sido hasta ahora), o en la clausura presente como primer argumento recibid. Sin mencionar que en el código principal RDI no contiene ninguna clausura.
-
-Para normalizar la búsqueda, antes de compilar el body de una función, se hace un paso de **RDI** al *Stack* de todos los valores de identificadores libres capturados, facilitando la búsqueda y acceso durante la ejecución del programa. Por ejemplo, la función `add5`, posee como variable libre a `n`:
+              HEAP MEMORY
+    --------------------------------
+    |   FROM SPACE  |   TO SPACE   |
+    --------------------------------
+    ↑               ↑              ↑
+HEAP START      HEAP MID       HEAP END
 ```
-(let (n 5)
-    (let (add5 (λ (x) (+ x n)))
-        (add5 3)))
-```
-Por lo que posterior al llamado de `add5`, en su stack frame ocurre lo siguiente:
-```
-push RBP                      // Calling Convention
-mov  RBP, RSP                 // Calling Convention        
-sub  RSP, 0x10                // Space in Stack (16 bytes)
-sub  RDI, 0x7                 // Untag the Closure in RDI
-mov  R11, qword[RDI + 24]     // Get n from closure
-mov  qword[RBP - 8], R11      // Save n in Stack
-add  RDI, 0x7                 // Tag the Closure in RDI
-```
-Se es consciente de que la decisión anterior puede hacer que los programas hagan un uso mas intensivo de la pila de ejecución, pero pareció más acertado.
 
-#### `letrec`
-Para facilitar la implementación recursiva de una lambda no basta con compilarla en un ambiente en que su clausura esté ligada al identificador adecuado (que, de hecho, siempre se encuentra en `RDI`). En particular, compilar  una expresión `letrec` que contiene más de una función no es trivial. Para solucionar este problema, la compilación tiene las siguientes etapas:
-- Calcular el tamaño de todas las clausuras.
-- Asignar el espacio correspondiente en el heap y agregar al ambiente punteros a las clausuras (vacías) ligados al identificador apropiado.
-- Compilar el cuerpo de las funciones.
-- Completar los valores de las clausuras.
+### Cheney's Algorithm
+Sigiendo el algoritmo de Cheney, se utilizan las siguientes funciones:
 
-Retrasar la captura de los valores libres hasta después de que se le haya asignado memoria a todas las clausuras permite tener disponible dentro del cuerpo de la lambda no sólo su propio identificador, sino además los otros identificadores en el `letrec`, para así poder definir funciones mutuamente recursivas.
+#### Try_GC
+Esta función cumple la tarea de gestionar los usos de memoria en el *heap*, verificando si el espacio existente es suficiente para alocar *n* elementos. De no ser así, dispara el llamado a la función `collect`. Su implementación dentro del código C es la siguiente:
+```C
+val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
+  if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) 
+    alloc_ptr = collect(cur_frame, cur_sp);
+  if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE)
+    exit(-1);
+  return alloc_ptr;
+}
+```
+Si una vez se realiza el proceso de `collect`, la memoria sigue siendo insuficiente, se levanta un error, terminando la ejecución del programa al instante.
 
-Salvo lo anteriormente descrito, una lambda recusiva se compila de forma análoga a una normal.
+#### Collect
+```C
+val* collect(val* cur_frame, val* cur_sp);
+```
+Esta función se encarga de filtrar los elementos vivos en `from-space` al `to-space`, intercambiando estos al final de su ejecución. 
+
+Para ello, primero declara los punteros:
+```
+  ALLOC_PTR = TO_SPACE; // TO_SPACE IS EMPTY
+  SCAN_PTR  = TO_SPACE; // TO_SPACE IS EMPTY
+```
+donde `ALLOC_PTR`, corresponde al puntero que indica la dirección donde se guardará el nuevo objeto, y `SCAN_PTR`, el puntero que recorrerá el `to-space` posteriormente buscando referencias que aún estén en el `from-space`.
+
+El procedimiento continúa realizando lo siguiente:
+```C
+  // for root in stack
+  for (val* cur_word = cur_sp; cur_word < cur_frame; cur_word++) {
+    val v = (val) *cur_word;    // The value in stack
+    if (is_heap_ptr(v))         // If pointer to heap
+      *cur_word = copy(v);      // Creates a copy in to-space
+  }
+```
+Se analizan todos los elementos que haya en *stack* que referencien a algún objeto vivo en *heap*. Cuando encuentra uno, crea una copia en el *to-space* y actualiza en *stack* una referencia a la nueva instancia.
+
+Una vez han sido analizados todos los elementos en *stack*, queda revisar dentro de los elementos copiados si es que alguno referencia a otro que aún reside dentro del `from-space`:
+```C
+  // Scanning objects in heap
+  while (SCAN_PTR < ALLOC_PTR){
+    val v = *SCAN_PTR;
+    if (is_heap_ptr(v)) {            // If pointer to heap
+      ptr = (val*) v;
+      if (!is_forwadding_addr(v))    // If pointer to from-space
+        *SCAN_PTR = copy(v);         // Creates a copy in to-space
+    }
+    SCAN_PTR++;
+  }
+```
+Si *v* es la dirección de algo en `from-space`, se procede a obtener una copia que ahora exista dentro del `to-space`.
+
+Habiendo realizado lo anterior, el contenido de `from-space` deja de ser útil, por lo que se le aplica una limpieza:
+```C
+val * tmp = FROM_SPACE;
+  val * END = (val) HEAP_MID > (val) FROM_SPACE ? HEAP_MID : HEAP_END;
+  while (tmp < END) {
+    *tmp++ = 0;
+  }
+```
+
+Finalmente, se realiza un `swap(FROM_SPACE,TO_SPACE)` a modo de que el nuevo `from-space` sea aquel que contiene los elementos vivos, retornando el `ALLOC_PTR`. Este es el puntero a la próxima ubicación en *heap* disponible.
+
+#### Copy
+Algo que quedó pendiente de `collect` es la copia de objetos. Para ello se implementa:
+```C
+val copy(val v){
+  val* origin_address = v & ~TAG_BITMASK;
+  if (!is_forwadding_addr((val*) *origin_address)){
+     // ...
+     // Does the copy process
+     // ...
+  }
+  return *origin_address;
+}
+```
+En esta función, primero se obtiene la ubicación real donde se encuentra el objeto a copiar. Si el contenido es una dirección al `to-space` (*forwading-address*), significa que el elemento ya fue movido y se entrega tal referencia. De no ser así, se ejecuta el proceso de copiado, el cual varía según el tipo de estructura a copiar:
+```C
+case TYPE_<structure>:
+  addr = copy_<structure>(v);   // Obtains a copy of <structure>
+  *origin_address = addr;       // Sets a forwader
+  return addr;                  // Returns the <structure> address
+```
+Donde `<structure>` puede ser *tuple*, *closure* o bien *record*, cada una de ellas con su función de copiado específica (ver en `rtsys.c` para más detalle).
 
 ## Tests
 La carpeta `tests` contiene tests variados para el compilador. En específico, para esta entrega se desarrollan casos de prueba en:
-- `tests/functions/first_class`: Implementación de First Class
+- `tests/gc`: Garbage Collector
 
-Los tests requeridos:
+Un ejemplo de prueba es el siguiente código:
+```
+(let (t (get (tup 8) 0))
+    (let (q (tup 2))
+        (let (t (tup q))
+            (let (x (set q 0 t))
+                (tup)))))
+```
+Sujeto a los parámetros `HEAP_SIZE=6` y `USE_GC=0`.
 
-*a)* Disponible en `fundefs_05.test`
-```
-(def (mapPair f p) (tup (f (get p 0)) (f (get p 1))))
+En el primer let, se guarda `(tup 8)` en el heap:
+| 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5 |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 8 |   |   |   |   |   
 
-(let (add3 (λ (x) (+ 3 x)))
-  (mapPair add3 (tup 39 2)))
-```
-*b)* Disponible en `lambda_05.test`
-```
-(def (fib n) 
-    (if (= n 0) 
-        0
-        (if (= n 1)
-            1
-            (+ (fib (- n 1)) (fib (- n 2))))))
+El segundo *let* introduce `(tup 2)`:
+| 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5 |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 8 | 1 | 2 |   |   |   
 
-(def (pair_fun f g p) 
-    (tup (f (get p 0)) 
-         (g (get p 1))))
-    
-(pair_fun (λ (x) (+ 3 x))
-          (λ (y) (pair_fun fib (λ (z) (* z y)) (tup y y)))
-          (tup 39 2))
-```
+El el tercer *let* necesita almacenar `(tup q)`:
+| 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5 |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 8 | 1 | 2 | 1 | 0x2 |   
+
+El el cuarto let *let* modifica la tupla `q`:
+| 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5 |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 8 | 1 | 0x4 | 1 | 0x2 |   
+
+Y el final del programa, requiere dejar `(tup)` en el heap, pero este esta lleno, por lo que se invoca al GC, el cual descubre que la tupla `(tup 8)` no es referenciado en *stack*. Esto lleva a que al realizar los movimientos al `to-space`, tal tupla no es copiada, quedando al final:
+| 0x6 | 0x7 | 0x8 | 0x9 | 0xa | 0xb |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 0x8 | 1 | 0x6 | 0 |  |   
+
+Lo cual permite almacener `(tup)` y retornar correctamente.

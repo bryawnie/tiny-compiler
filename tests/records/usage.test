@@ -1,4 +1,5 @@
 NAME: record usage test
+PARAMS: HEAP_SIZE=32
 SRC:
 (record point3d x y z)
 (def (addpoint3d p1 p2)

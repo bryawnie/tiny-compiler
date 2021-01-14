@@ -27,6 +27,32 @@ let callee_epilogue = [
   IPop (Reg RBP)
 ]
 
+let try_gc (n: int): instruction list = [
+
+  IEmpty;
+  IComment "Trying GC for allocating memory";
+
+  IPush (Reg RDI);
+  IPush (Reg RSI);
+  IPush (Reg RDX);
+  IPush (Reg RCX);
+
+  IMov (Reg RDI, Reg heap_reg);           (* Alloc Pointer *)
+  IMov (Reg RSI, Const (Int64.of_int n)); (* Words Needed *)
+  IMov (Reg RDX, Reg RBP);  (* Current Frame *)
+  IMov (Reg RCX, Reg RSP);  (* Current Stack Pointer *)
+  ICall (Label "try_gc");
+  IMov (Reg heap_reg, Reg ret_reg); (*Returns the new Alloc pointer*)
+
+  IPop (Reg RCX);
+  IPop (Reg RDX);
+  IPop (Reg RSI);
+  IPop (Reg RDI);
+
+  IComment "END of GC";
+  IEmpty;
+]
+
 (* Counts the max number of expressions mantained in stack at the same time *)
 let rec varcount (e:expr): int =
   match e with
@@ -166,7 +192,7 @@ let compile_closure (label: string) (arity: int64) (free_vars: string list)
     in
     List.concat @@ List.mapi instructions ids
   in
-
+  try_gc size @
   [ IMov (RegOffset (heap_reg, 0), Const (encode_int arity)) (* arity *)
   ; IMov (RegOffset (heap_reg, 1), Label label)       (* code pointer *)
   ; IMov (RegOffset (heap_reg, 2), Const num_fv)]    (* free var count*)
@@ -427,6 +453,7 @@ let compile_tuple (elems: expr list) (env: env)
   let size = List.length elems in
   let assign_tuple = assign_tuple_values 1 size env in
   compile_elems @ 
+  try_gc (List.length elems + 1) @  (* Garbage Collector *)
   [IMov (RegOffset (heap_reg, 0), Const (encode_int (Int64.of_int size)))] @ 
   assign_tuple @
   [
@@ -434,9 +461,9 @@ let compile_tuple (elems: expr list) (env: env)
     IAdd ((Reg ret_reg), tuple_tag);         (* Tag the tuple *)
     IAdd (Reg heap_reg, Const (Int64.of_int (size*8 + 8 ))) (* Bump the heap pointer *)
   ]
-  @ if (size+1) mod 2 = 1 then
+  (* @ if (size+1) mod 2 = 1 then
     [IAdd (Reg heap_reg, Const 8L)]
-  else []
+  else [] *)
   @ type_checking (Reg ret_reg) TupleT
 
 (* -----------------------------------
@@ -857,7 +884,8 @@ let compile_record (id: string) (fields: string list) (env: env) :
         @ write_flds tl (offset + 1)
     in
     [ ILabel constructor_label]
-    @ callee_prologue @
+    @ callee_prologue 
+    @ try_gc (1 + List.length fields) @
     (* record tag word = rectag|size *)
     [ IMov (Reg ret_reg, Const rec_tag)
     ; IMov (RegOffset (heap_reg, 0), Reg ret_reg)]
@@ -955,7 +983,7 @@ let rec assemble_prog (prog: prog) (env: env):
   let Program (decls, main) = prog in
   match decls with
   | [] -> [], 
-    [IComment "<<========# Main #========>>"; ILabel "__main__"] 
+    [IEmpty; IComment "<<========# Main #========>>"; IEmpty; ILabel "__main__"] 
     @ compile_expr main env
   | hd::tl ->
     begin
@@ -989,6 +1017,15 @@ let rec assemble_prog (prog: prog) (env: env):
       
     end
 
+(* Sets the value of Stack bottom *)
+let set_stack_bottom : instruction list =
+  [
+    IPush (Reg RDI);
+    IMov (Reg RDI, Reg RBP);
+    ICall (Label "set_stack_bottom");
+    IPop (Reg RDI);
+  ]
+
 (* Generates the compiled program *)
 let compile_prog : prog Fmt.t =
   fun fmt p ->
@@ -1006,7 +1043,10 @@ let compile_prog : prog Fmt.t =
 ;; Also called system functions
 extern error
 extern print
+extern try_gc
 extern raw_print
+extern set_stack_bottom
+
 %a
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;          MAIN PROGRAM         ;;
@@ -1015,12 +1055,16 @@ global our_code_starts_here
 our_code_starts_here:
 %a
   mov  R15, RDI                 ;; load R15 with the passed HEAP
-  add  R15, 7                   ;; Add 7 to the next multiple of 7
-  mov  R11, 0xfffffffffffffff8  ;; R11 is now 11111...1000
-  and  R15, R11                 ;; Round back down
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Setting Stack Bottom in RTSYS ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%a
+
 %a" 
       pp_instrs externs 
       pp_instrs callee_prologue 
+      pp_instrs set_stack_bottom
       pp_instrs (
         [ISub (Reg RSP, Const stack_offset)]
         @ instrs 

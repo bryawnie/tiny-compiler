@@ -1,0 +1,9 @@
+NAME: simple gc
+DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 4
+PARAMS: HEAP_SIZE=4, USE_GC=1
+SRC:
+(let (t (tup 2))
+    (let (x (get (tup 5) 0))
+        (let (t2 (tup 2))
+            (get t 0))))
+EXPECTED: 2

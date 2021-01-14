@@ -1,0 +1,11 @@
+NAME: simple gc
+DESCRIPTION: tries to applicate GC with nested tuples
+PARAMS: HEAP_SIZE=6, USE_GC=0
+STATUS: RT error
+SRC:
+(let (t (get (tup 8) 0))
+    (let (q (tup (tup 1)))
+        (let (p (tup))
+            q)))
+EXPECTED:
+out of memory
