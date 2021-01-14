@@ -133,6 +133,31 @@ case TYPE_<structure>:
 ```
 Donde `<structure>` puede ser *tuple*, *closure* o bien *record*, cada una de ellas con su función de copiado específica (ver en `rtsys.c` para más detalle).
 
+#### Compiler
+Por el lado del compilador, antes de realizar cualquier alocación de memoria para pedir *n* en espacio, se realiza una llamada a `try_gc` mediante el siguiente *assembly* estándar:
+```
+;; Trying GC for allocating memory
+  push RDI
+  push RSI
+  push RDX
+  push RCX
+  
+  mov  RDI, R15
+  mov  RSI, 0x3
+  mov  RDX, RBP
+  mov  RCX, RSP
+  call try_gc
+  
+  mov  R15, RAX   ;; The new heap-pointer
+  
+  pop  RCX
+  pop  RDX
+  pop  RSI
+  pop  RDI
+;; END of GC
+```
+De este modo, el control de memoria es delegado al *runtime system* desde ahora.
+
 ## Tests
 La carpeta `tests` contiene tests variados para el compilador. En específico, para esta entrega se desarrollan casos de prueba en:
 - `tests/gc`: Garbage Collector
