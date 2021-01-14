@@ -884,7 +884,8 @@ let compile_record (id: string) (fields: string list) (env: env) :
         @ write_flds tl (offset + 1)
     in
     [ ILabel constructor_label]
-    @ callee_prologue @
+    @ callee_prologue 
+    @ try_gc (1 + List.length fields) @
     (* record tag word = rectag|size *)
     [ IMov (Reg ret_reg, Const rec_tag)
     ; IMov (RegOffset (heap_reg, 0), Reg ret_reg)]

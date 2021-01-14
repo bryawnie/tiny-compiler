@@ -1,5 +1,5 @@
 NAME: simple gc
-DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 2, works only for 1 tuple.
+DESCRIPTION: tries to applicate GC, with HEAP_SIZE = 4
 PARAMS: HEAP_SIZE=4, USE_GC=1
 SRC:
 (let (t (tup 2))

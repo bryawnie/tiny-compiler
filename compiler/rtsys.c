@@ -492,20 +492,32 @@ val copy_record(val v){
  * if is a forwadding address returns itself
 **/
 val copy(val v){
-  val* ptr = (val*) v;
-  if (!is_forwadding_addr(ptr)){
+  val* origin_address = v & ~TAG_BITMASK;
+  if (!is_forwadding_addr((val*) *origin_address)){
+    
+    val addr;
     switch (typeofval(v)){
+
       case TYPE_TUPLE:
-        return copy_tuple(v);
+        addr = copy_tuple(v);   // Obtains a copy of tuple
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the tuple address
+
       case TYPE_CLOSURE:
-        return copy_closure(v);
+        addr = copy_closure(v); // Obtains a copy of closure
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the closure address
+
       case TYPE_RECORD:
-        return copy_record(v);
+        addr = copy_record(v);  // Obtains a copy of record
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the record address
+
       default:
         break;
     }
   }
-  return v;
+  return *origin_address;
 }
 
 val* collect(val* cur_frame, val* cur_sp) {
@@ -517,22 +529,41 @@ val* collect(val* cur_frame, val* cur_sp) {
 
   val* ptr;
 
+  // print_stack(cur_frame,cur_sp);
+
+  // printf("| PREVIOUS TO GC \n\n");
+  // print_heaps();
+
   // for root in stack
-  for (val* cur_word = cur_sp; cur_word < cur_frame; cur_word++) {
+  for (val* cur_word = cur_sp; cur_word < STACK_BOTTOM; cur_word++) {
     val v = (val) *cur_word;    // The value in stack
     if (is_heap_ptr(v)) {       // If pointer to heap
+      // printf("| value at %p \n", v);
       *cur_word = copy(v);      // Creates a copy in to-space
     }
   }
+  // printf("| AFTER SCAN STACK \n\n");
+  // print_heaps();
+
+  // printf("| uwuwu \n");
 
   // Scanning objects in heap
   while (SCAN_PTR < ALLOC_PTR){
     val v = *SCAN_PTR;
-    if (is_heap_ptr(v)) {       // If pointer to heap
-      *SCAN_PTR = copy(v);      // Creates a copy in to-space
+    // printf("| value at %p \n", v);
+    if (is_heap_ptr(v)) {           // If pointer to heap
+      ptr = (val*) v;
+      if (!is_forwadding_addr(v)){                                  // If pointer to from-space
+        // printf("| POINTER TO FROM-SPACE DETECTED at %p \n", v);
+        //v = *((val*) ((val) ptr & ~TAG_BITMASK));                   // Obtains location in from-space
+        *SCAN_PTR = copy(v);                                        // Creates a copy in to-space
+      }
     }
     SCAN_PTR++;
   }
+
+  // printf("| AFTER SCAN HEAP \n\n");
+  // print_heaps();
   
   // Cleaning from-space
   val * tmp = FROM_SPACE;
