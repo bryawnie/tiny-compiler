@@ -167,4 +167,9 @@ El el cuarto let *let* modifica la tupla `q`:
 -- | -- | -- | -- | -- | -- 
 | 1 | 8 | 1 | 0x4 | 1 | 0x2 |   
 
-Y el final del programa, requiere dejar `(tup)` en el heap, pero este esta lleno, por lo que se invoca al GC, el cual descubre que la tupla `(tup 8)` no es referenciado en *stack*, por lo cual
+Y el final del programa, requiere dejar `(tup)` en el heap, pero este esta lleno, por lo que se invoca al GC, el cual descubre que la tupla `(tup 8)` no es referenciado en *stack*. Esto lleva a que al realizar los movimientos al `to-space`, tal tupla no es copiada, quedando al final:
+| 0x6 | 0x7 | 0x8 | 0x9 | 0xa | 0xb |   
+-- | -- | -- | -- | -- | -- 
+| 1 | 0x8 | 1 | 0x6 | 0 |  |   
+
+Lo cual permite almacener `(tup)` y retornar correctamente.
