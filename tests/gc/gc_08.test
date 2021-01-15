@@ -1,0 +1,15 @@
+NAME: closure garbage collection
+PARAMS: HEAP_SIZE=37
+SRC:
+(record list hd tl)
+(record null)
+(def (sumatoria l)
+    (letrec 
+        (fold-right (λ (f l)
+            (if (null? (list-tl l))
+                (list-hd l)
+                (f (list-hd l) (fold-right f (list-tl l))))))
+        (fold-right (λ (a b) (+ a b)) l)))
+(let (l (list 1 (list 2 (list 3 (null)))))
+    (+ (sumatoria l) (sumatoria l)))
+EXPECTED: 12

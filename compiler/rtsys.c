@@ -19,9 +19,9 @@ val HEAP_SIZE = 16; // = 16;
 int USE_GC = 1;
 
 /* externs */
-extern void error(val err_code, val val) asm("error");
+extern void error(int err_code, val val) asm("error");
 extern val print(val val) asm("print");
-extern val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) asm("try_gc");
+extern val* try_gc(val* alloc_ptr, int words_needed, val* cur_frame, val* cur_sp) asm("try_gc");
 extern val our_code_starts_here(val* HEAP) asm("our_code_starts_here");
 extern void set_stack_bottom(val* stack_bottom) asm("set_stack_bottom");
 /* */
@@ -259,12 +259,11 @@ int arr_sprintval(char *str, val *a, int size, char* pre, char* post) {
   return s - str;
 }
 
-void error(val err, val v) {
+void error(int err, val v) {
 
-  int_v errCode = (int_v) err;
   const char *format;
 
-  switch (errCode){
+  switch (err){
   case ERR_NOT_NUMBER:
     format = "Expected number, but got ";
     break;
@@ -296,7 +295,7 @@ void error(val err, val v) {
     format = "Expected a function, got ";
     break;
   default:
-    fprintf(stderr, "Unknown error code: %d", errCode);
+    fprintf(stderr, "Unknown error code: %d", err);
     goto end;
     break;
   }
@@ -306,7 +305,7 @@ void error(val err, val v) {
   fprintf(stderr, "\n");
 
 end:
-  exit(errCode);
+  exit(err);
 }
 
 /* DEFAULT FOREIGN FUNCTIONS */
@@ -459,16 +458,21 @@ val copy_closure(val v){
   val addr = ((val) ALLOC_PTR | TAG_CLOSURE);
   // Obtains the closure
   val * closure = VAL_TO_PTR(v);
+  printf("| copying closure\n");
   // First, copy the arity
+  printf("|   arity: %d\n", (*closure)>>1);
   *ALLOC_PTR++ = *closure++;
   // Then, copy the address in code (label)
+  printf("|   address: %.16lx\n", *closure);
   *ALLOC_PTR++ = *closure++;
   // After that, the number of free vars
-  int free_vars = *closure++;
-  *ALLOC_PTR++ = free_vars;
+  int free_vars = *closure;
+  printf("|   enclosed ids: %d\n", free_vars);
+  *ALLOC_PTR++ = *closure++;
   // And now on, all the free vars values
   for (int i = 0; i < free_vars; i++){
-    *ALLOC_PTR++ = *(closure++);
+    printf("|   enclosed value: %.16lx\n", *closure);
+    *ALLOC_PTR++ = *closure++;
   }
   return addr;
 }
@@ -552,7 +556,7 @@ val* collect(val* cur_frame, val* cur_sp) {
 }
 
 /* trigger GC if enabled and needed, out-of-memory error if insufficient */
-val* try_gc(val* alloc_ptr, val words_needed, val* cur_frame, val* cur_sp) {
+val* try_gc(val* alloc_ptr, int words_needed, val* cur_frame, val* cur_sp) {
   // WIP: collect function
   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
     //printf("| Before GC \n");

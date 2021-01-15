@@ -32,6 +32,7 @@ let try_gc (n: int): instruction list = [
   IEmpty;
   IComment "Trying GC for allocating memory";
 
+  IPush (Reg R10);
   IPush (Reg RDI);
   IPush (Reg RSI);
   IPush (Reg RDX);
@@ -48,6 +49,7 @@ let try_gc (n: int): instruction list = [
   IPop (Reg RDX);
   IPop (Reg RSI);
   IPop (Reg RDI);
+  IPop (Reg R10);
 
   IComment "END of GC";
   IEmpty;
@@ -134,14 +136,14 @@ let rec free_vars (exp: expr) (saved: string list): string list =
   Another way to determine unbound identifiers in an expression.
 *)
 let rec free_ids (e: expr) (bound_ids: string list) : string list =
+  let rec recmap bids elist =
+    match elist with
+    | [] -> []
+    | hd::tl -> 
+      let ids = free_ids hd bids in
+      ids @ recmap (ids @ bids) tl
+  in
   let map = 
-    let rec recmap bids elist =
-      match elist with
-      | [] -> []
-      | hd::tl -> 
-        let ids = free_ids hd bids in
-        ids @ recmap (ids @ bids) tl
-    in
     recmap bound_ids
   in
   match e with
@@ -151,9 +153,11 @@ let rec free_ids (e: expr) (bound_ids: string list) : string list =
   | UnOp (_, x) -> free_ids x bound_ids
   | BinOp (_, x, y) -> map [x ; y]
   | Let (bindings, e) ->
-    let ids, _ = List.split bindings in free_ids e (ids @ bound_ids)
+    let ids, vals = List.split bindings in 
+    recmap (ids @ bound_ids) (vals @ [e])
   | LetRec (bindings, e) ->
-    let ids, _ = List.split bindings in free_ids e (ids @ bound_ids)
+    let ids, lambdas = List.split bindings in
+    recmap (ids @ bound_ids) (lambdas @ [e])
   | If (c, t, e) -> map [c ; t ; e]
   | Fun (params, body) -> free_ids body (params @ bound_ids)
   | App (f, args) -> map (f::args)
@@ -399,7 +403,7 @@ let compile_fof_call  (funexpr: expr) (args: expr list) (env: env)
   let restore_rsp = if argc > 6 
     then [IAdd (Reg RSP, Const (Int64.of_int (8 * (argc - 6))))]
     else [] in
-  let restore_regs   = pop_regs argc arg_regs in                      (* Pop calling registers *)
+  let restore_regs   = pop_regs argc arg_regs in (* Pop calling registers *)
   compiled_clos 
   @ [ IComment "Saving the closure"; IMov (slot_clos, Reg ret_reg)] (* Passing the closure *)
   @ type_checking (Reg ret_reg) ClosureT          (* Typechecking *)
@@ -415,7 +419,7 @@ let compile_fof_call  (funexpr: expr) (args: expr list) (env: env)
     IPush (Reg closure_reg) ; (* backup closure register *)
     ICall (Reg ret_reg) ;
     IPop (Reg closure_reg)] (* restore closure register *) 
-  @ restore_rsp @ restore_regs    
+  @ restore_rsp @ restore_regs
 
 (* -----------------------------------
   |              TUPLES              |                
@@ -603,12 +607,17 @@ let compile_lambda (ids: string list) (body: expr) (env: env)
   @ [ IRet; IEmpty; IComment "End of Lambda Definition"; ILabel ("end_of_"^label) ]
   @ closure_definition
 
+(*
+  #===========================#
+  #           LETREC          #
+  #===========================#
+*)
 (* recursive lambda. it can reference itself with the proper id *)
 let compile_reclambda (id: string) (params: string list) (body: expr) (env: env) 
 (compile_expr: expr -> env -> instruction list) : instruction list = 
   (* CLOSURE CREATION *)
   let arity = (Int64.of_int (List.length params)) in  (* Arity of function *)
-  let label = gensym @@ "lambda"^id in  (* Label of function *)
+  let label = "lambda_"^(get_fun_label id) in  (* Label of function *)
   let free  = remove_repeated @@ free_vars body (id::params) in  (* Free Ids *)
   let (lenv, senv) = env in  (* Split lenv and senv *)
   let closure_definition =
@@ -618,7 +627,9 @@ let compile_reclambda (id: string) (params: string list) (body: expr) (env: env)
   (* Now the closure is in RAX *)
   in
   (* BODY COMPILATION *)
-  let new_lenv = let_env_from_params (id::params) empty_env in (* parameters *)
+  let new_lenv = 
+    (id, MReg RDI)::(let_env_from_params (id::params) empty_env)
+  in (* parameters *)
   (* 
     ADD FREE VARS TO STACK
     Bounds to stack the references of free ids contained in
@@ -637,8 +648,9 @@ let compile_reclambda (id: string) (params: string list) (body: expr) (env: env)
       @ instrs, ret_env)
   in
   (* Adding free vars into stack *)
-  let add_fv, fun_env   = add_freevars_stack free (new_lenv, senv) in
-  let stack_offset = Int64.of_int (stack_offset_for_local body) in  (* Stack Offset needed *)
+  let add_fv, fun_env = add_freevars_stack free (new_lenv, senv) in
+  let stack_offset = Int64.of_int (stack_offset_for_local body) in  
+  (* Stack Offset needed *)
   [
     IJmp (Label ("end_of_"^label));
     IEmpty;
@@ -661,8 +673,22 @@ let compile_reclambda (id: string) (params: string list) (body: expr) (env: env)
 (* compiles a recursive let binding *)
 let compile_letrec (compiler: expr->env->instruction list) (env:env) 
   (bindings: (string * expr) list) : instruction list * env =
+  let closure_size e params = (3 + List.length (free_ids e params)) in
+  let total_size =
+    let size f =
+      let id, e = f in
+      match e with
+      | Fun (params, body) -> closure_size body (id::params)
+      | _ -> Fmt.failwith "letrec expects a lambda, but '%s' is bound to %a" id pp_expr e
+    in
+    List.fold_right (fun f s -> size f + s) bindings 0
+  in
 
-  (* this preallocates the heap space closures will occupy *)
+  (* this preallocates the heap space closures will occupy.
+  Returns:
+    compiled preallocation : instruction list
+    environment containing new closures : env
+    lambdas : (string * (string list) * expr) list *)
   let rec preallocate env bindings :
    instruction list * env * (string * (string list) * expr) list =
     match bindings with
@@ -672,9 +698,7 @@ let compile_letrec (compiler: expr->env->instruction list) (env:env)
         match expr with
         | Fun (params, fbody) -> 
           let new_env, loc = extend_env id env in
-          let closure_size = 
-            Int64.of_int ((3 + List.length (free_ids fbody (id::params))) * 8) 
-          in
+          let closure_size = Int64.of_int (closure_size fbody (id::params) * 8) in
           let instr_tl, final_env, binding_tl = preallocate new_env tl in
           [IMov (Reg aux_reg, Reg ret_reg) ;
            IAdd (Reg aux_reg, function_tag) ;
@@ -688,7 +712,7 @@ let compile_letrec (compiler: expr->env->instruction list) (env:env)
       end
   in
 
-  let preallocation, compilation_env, processed_bindings = 
+  let preallocation, final_env, processed_bindings = 
     preallocate env bindings 
   in
 
@@ -697,16 +721,17 @@ let compile_letrec (compiler: expr->env->instruction list) (env:env)
     | [] -> []
     | (id, params, body)::tl ->
       (* heap space should have already been preallocated *)
-      compile_reclambda id params body compilation_env compiler
+      compile_reclambda id params body final_env compiler
       @ compile_lambdas tl 
   in
 
+  try_gc total_size @
   [IPush (Reg ret_reg)
   ;IMov (Reg ret_reg, Reg heap_reg)] @
   preallocation @
   [IPop (Reg ret_reg)] @
   compile_lambdas processed_bindings,
-  compilation_env
+  final_env
 
 
 (*------------------------------------
