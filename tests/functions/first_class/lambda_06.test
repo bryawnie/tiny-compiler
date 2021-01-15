@@ -1,0 +1,7 @@
+NAME: C call
+SRC:
+(defsys min int int -> int)
+(let (myMin (λ (x y) (@sys min x y)))
+    (myMin 9 7))
+
+EXPECTED: 7
