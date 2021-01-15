@@ -1,0 +1,4 @@
+NAME: lambda
+SRC: (λ (x) x)
+EXPECTED:
+<Function with arity 1>

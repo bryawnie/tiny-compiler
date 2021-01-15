@@ -114,6 +114,9 @@ int charcount(val v) {
     case TYPE_RECORD:
       return 2 + arr_charcount(RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v));
 
+    case TYPE_CLOSURE:
+      return 50;
+
     default:
       return 40;
   }
@@ -169,8 +172,7 @@ void printval(FILE *out, val v) {
       break;
 
     case TYPE_CLOSURE:
-      fprintf(out, "<Function at %#.16lx with arity %ld>",
-        CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
+      fprintf(out, "<Function with arity %ld>", CLOSURE_ARITY(v));
       break;
 
     default:
@@ -232,8 +234,7 @@ int sprintval(char *str, val v) {
       return arr_sprintval(str, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
 
     case TYPE_CLOSURE:
-      return sprintf(str, "<Function at %#.16lx with arity %ld>",
-        CLOSURE_ADDRESS(v), CLOSURE_ARITY(v));
+      return sprintf(str, "<Function with arity %ld>", CLOSURE_ARITY(v));
 
     default:
     unknown:
