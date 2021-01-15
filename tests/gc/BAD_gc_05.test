@@ -1,0 +1,11 @@
+NAME: simple gc
+DESCRIPTION: tries to applicate GC, with a tuple that references another id.
+PARAMS: HEAP_SIZE=6, USE_GC=0
+STATUS: RT error
+SRC:
+(let (t (get (tup 8) 0))
+    (let (q (tup 2))
+        (let (t (tup q))
+            (tup))))
+EXPECTED:
+out of memory

@@ -1,0 +1,13 @@
+NAME: recursive structures gc
+DESCRIPTION: in this case we have 2 tuples that references each other
+PARAMS: HEAP_SIZE=7, USE_GC=0
+STATUS: RT error
+SRC:
+(let (s (let (sum (λ (x y) (+ x y)))
+            (sum 3 4) ))
+    (let (q (let (f (λ (x) (+ x s))) 
+                (f 7) ))
+        (let (t (tup q s))
+            t)))
+EXPECTED:
+out of memory

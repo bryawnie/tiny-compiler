@@ -499,24 +499,39 @@ val copy_record(val v){
  * if is a forwadding address returns itself
 **/
 val copy(val v){
-  val* ptr = (val*) v;
-  if (!is_forwadding_addr(ptr)){
+  val* origin_address = v & ~TAG_BITMASK;
+  if (!is_forwadding_addr((val*) *origin_address)){
+    
+    val addr;
     switch (typeofval(v)){
+
       case TYPE_TUPLE:
-        return copy_tuple(v);
+        addr = copy_tuple(v);   // Obtains a copy of tuple
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the tuple address
+
       case TYPE_CLOSURE:
-        return copy_closure(v);
+        addr = copy_closure(v); // Obtains a copy of closure
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the closure address
+
       case TYPE_RECORD:
-        return copy_record(v);
+        addr = copy_record(v);  // Obtains a copy of record
+        *origin_address = addr; // Sets a forwader
+        return addr;            // Returns the record address
+
       default:
         break;
     }
   }
-  return v;
+  return *origin_address;
 }
 
+/**
+ * Makes the cleaning to collect memory
+**/
 val* collect(val* cur_frame, val* cur_sp) {
-  /* TBD: see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
+  /* see https://en.wikipedia.org/wiki/Cheney%27s_algorithm */
 
   // init pointers
   ALLOC_PTR = TO_SPACE; // TO_SPACE IS EMPTY
@@ -525,7 +540,7 @@ val* collect(val* cur_frame, val* cur_sp) {
   val* ptr;
 
   // for root in stack
-  for (val* cur_word = cur_sp; cur_word < cur_frame; cur_word++) {
+  for (val* cur_word = cur_sp; cur_word < STACK_BOTTOM; cur_word++) {
     val v = (val) *cur_word;    // The value in stack
     if (is_heap_ptr(v)) {       // If pointer to heap
       *cur_word = copy(v);      // Creates a copy in to-space
@@ -535,12 +550,15 @@ val* collect(val* cur_frame, val* cur_sp) {
   // Scanning objects in heap
   while (SCAN_PTR < ALLOC_PTR){
     val v = *SCAN_PTR;
-    if (is_heap_ptr(v)) {       // If pointer to heap
-      *SCAN_PTR = copy(v);      // Creates a copy in to-space
+    if (is_heap_ptr(v)) {           // If pointer to heap
+      ptr = (val*) v;
+      if (!is_forwadding_addr(v)){                                  // If pointer to from-space
+        *SCAN_PTR = copy(v);                                        // Creates a copy in to-space
+      }
     }
     SCAN_PTR++;
   }
-  
+
   // Cleaning from-space
   val * tmp = FROM_SPACE;
   val * END = (val) HEAP_MID > (val) FROM_SPACE ? HEAP_MID : HEAP_END;
@@ -559,11 +577,8 @@ val* collect(val* cur_frame, val* cur_sp) {
 val* try_gc(val* alloc_ptr, int words_needed, val* cur_frame, val* cur_sp) {
   // WIP: collect function
   if (USE_GC==1 && alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
-    //printf("| Before GC \n");
-    //print_heaps();
     printf("| need memory: GC!\n");
     alloc_ptr = collect(cur_frame, cur_sp);
-    //print_heaps();
   }
   if (alloc_ptr + words_needed > FROM_SPACE + HEAP_SIZE) {
     printf("| Error: out of memory!\n\n");
@@ -619,30 +634,3 @@ int main(int argc, char** argv){
 
   return 0;
 }
-
-
-/**
- * OLD (DEAD) CODE
- * Not useful anymore
- * -- DELETE BEFORE SUBMIT --
-**/
-
-/* MAIN */
-// int main(int argc, char** argv) {
-//   uint64_t * HEAP = calloc(1024, sizeof(uint64_t));
-
-//   if (!HEAP){
-//     fprintf(stderr, "Heap space allocation failed");
-//     exit(-1);
-//   }
-
-//   val result = our_code_starts_here(HEAP);
-
-//   char *str = malloc(charcount(result));
-//   sprintval(str, result);
-//   printf("%s\n", str);
-//   free(str);
-
-//   free(HEAP);
-//   return 0;
-// }
