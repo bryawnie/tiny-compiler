@@ -1,5 +1,7 @@
 NAME: closure garbage collection
-PARAMS: HEAP_SIZE=37
+DESCRIPTION: if lambdas are not GC'd then this test fails with an 
+"out of memory" error.
+PARAMS: HEAP_SIZE=43
 SRC:
 (record list hd tl)
 (record null)
@@ -10,6 +12,6 @@ SRC:
                 (list-hd l)
                 (f (list-hd l) (fold-right f (list-tl l))))))
         (fold-right (λ (a b) (+ a b)) l)))
-(let (l (list 1 (list 2 (list 3 (null)))))
-    (+ (sumatoria l) (sumatoria l)))
+(+ (sumatoria (list 1 (list 2 (list 3 (null))))) 
+    (sumatoria (list 1 (list 2 (list 3 (null))))))
 EXPECTED: 12

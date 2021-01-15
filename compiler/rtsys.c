@@ -159,13 +159,12 @@ void printval(FILE *out, val v) {
 
     case TYPE_TUPLE:
       if (GET_TUPLE_SIZE(v) == 0)
-        fprintf(out, "(tup)\n");
-      arr_printval(out, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
+        fprintf(out, "(tup)");
+      else
+        arr_printval(out, TUPLE_TO_ARRAY(v), GET_TUPLE_SIZE(v), "(tup ", ")");
       break;
 
     case TYPE_RECORD:
-      if (GET_RECORD_SIZE(v) == 0)
-        fprintf(out, "{}\n");
       arr_printval(out, RECORD_TO_ARRAY(v), GET_RECORD_SIZE(v), "{", "}");
       break;
 
@@ -388,10 +387,10 @@ void print_stack(val* rbp, val* rsp) {
   
   for (val* cur_word = rsp; cur_word < rbp; cur_word++) {
     val v = (val) *cur_word;
-    printf("|-- %p: %p ", cur_word, (val*) *cur_word);
-    if (is_heap_ptr(v)) {
+    printf("|-- %#.16lx: %-#18lx = ", cur_word, (val*) *cur_word);
+    // if (is_heap_ptr(v)) {
       printval(stdout, v);
-    }
+    // }
     printf("\n");
   }
   if (rbp < STACK_BOTTOM) {
@@ -458,20 +457,15 @@ val copy_closure(val v){
   val addr = ((val) ALLOC_PTR | TAG_CLOSURE);
   // Obtains the closure
   val * closure = VAL_TO_PTR(v);
-  printf("| copying closure\n");
   // First, copy the arity
-  printf("|   arity: %d\n", (*closure)>>1);
   *ALLOC_PTR++ = *closure++;
   // Then, copy the address in code (label)
-  printf("|   address: %.16lx\n", *closure);
   *ALLOC_PTR++ = *closure++;
   // After that, the number of free vars
   int free_vars = *closure;
-  printf("|   enclosed ids: %d\n", free_vars);
   *ALLOC_PTR++ = *closure++;
   // And now on, all the free vars values
   for (int i = 0; i < free_vars; i++){
-    printf("|   enclosed value: %.16lx\n", *closure);
     *ALLOC_PTR++ = *closure++;
   }
   return addr;
